@@ -3,7 +3,7 @@
 ;@Ahk2Exe-SetDescription Comprehensive hardware & software report with export
 ;@Ahk2Exe-SetCompanyName Rekow IT
 ;@Ahk2Exe-SetCopyright Copyright © 2026 Rekow IT
-;@Ahk2Exe-SetVersion 1.3
+;@Ahk2Exe-SetVersion 1.3.1
 ;@Ahk2Exe-SetLanguage 0x0807
 #Requires AutoHotkey v2.0
 #SingleInstance Force
@@ -11,7 +11,7 @@
 SetWorkingDir(A_ScriptDir)
 
 ; ─── Global state ───────────────────────────────────────────────
-global APP_VERSION   := "1.3.0"
+global APP_VERSION   := "1.3.1"
 global APP_COPYRIGHT := "`n`nCopyright © 2026 by Rekow IT`n`nhttps://rekow.ch"
 global GITHUB_REPO   := "acidstout/systeminfo"
 global AllData       := Map()
@@ -857,8 +857,14 @@ GetGPUInfo() {
             info.Push([T("gpu_driver"), d["DriverVersion"]])
             info.Push([T("gpu_driverdate"), FormatWmiDate(d["DriverDate"])])
             vram := Round(d["AdapterRAM"] / (1024**3), 1)
-            if (vram <= 0)
-                vram := ">4 (WMI limit)"
+            if (vram <= 0) {
+				vramBytes := ResolveVRAM(d["PNPDeviceID"], d["AdapterRAM"])
+				if (vramBytes <= 0) {
+					vram := ">4 (WMI limit)"
+				} else {
+					vram := Round(vramBytes / (1024**3))
+				}
+			}
             info.Push([T("gpu_vram"), vram . (IsNumber(vram) ? " GB" : "")])
             info.Push([T("gpu_vidmode"), d["VideoModeDescription"]])
             info.Push([T("gpu_res"), d["CurrentHorizontalResolution"] . " × " . d["CurrentVerticalResolution"]])
@@ -1027,6 +1033,84 @@ GetVideoOutputType(code) {
         14, "SDTV Dongle", 15, "Miracast", 16, "Internal"
     )
     return types.Has(code) ? types[code] : "Unknown (" . code . ")"
+}
+
+RegReadQWORD(keyPath, valueName) {
+    ; Use RegQueryValueEx via DllCall to reliably read REG_QWORD values
+    ; Split keyPath into root key handle and subkey
+    if InStr(keyPath, "HKLM\") = 1
+        hRoot := 0x80000002  ; HKEY_LOCAL_MACHINE
+    else
+        return 0
+
+    subKey := SubStr(keyPath, 6)  ; strip "HKLM\"
+
+    hKey := 0
+    result := DllCall("advapi32\RegOpenKeyEx", "Ptr", hRoot, "Str", subKey, "UInt", 0, "UInt", 0x20019, "Ptr*", &hKey, "UInt")
+    if (result != 0)
+        return 0
+
+    ; Query the value - allocate 8 bytes for QWORD
+    buf := Buffer(8, 0)
+    dataSize := 8
+    regType := 0
+    result := DllCall("advapi32\RegQueryValueEx"
+        , "Ptr", hKey
+        , "Str", valueName
+        , "Ptr", 0
+        , "UInt*", &regType
+        , "Ptr", buf
+        , "UInt*", &dataSize
+        , "UInt")
+
+    DllCall("advapi32\RegCloseKey", "Ptr", hKey)
+
+    if (result != 0)
+        return 0
+
+    ; Read as two 32-bit halves and combine into 64-bit integer
+    lo := NumGet(buf, 0, "UInt")
+    hi := NumGet(buf, 4, "UInt")
+    return hi * 0x100000000 + lo
+}
+
+ResolveVRAM(pnpDeviceID, adapterRAM) {
+    ; Extract device ID: join first two '&'-delimited segments of PNPDeviceID
+    parts := StrSplit(pnpDeviceID, "&")
+    gpuDeviceID := parts.Length >= 2 ? parts[1] "&" parts[2] : pnpDeviceID
+
+    regBase := "HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+
+    Loop Reg regBase, "K"
+    {
+        subKey := regBase "\" A_LoopRegName
+
+        ; Check if MatchingDeviceId starts with our GPU device ID
+        try {
+            matchId := RegRead(subKey, "MatchingDeviceId")
+        } catch {
+            continue
+        }
+
+        ; PowerShell used -like "${GPUDeviceID}*" i.e. starts-with check
+        if (SubStr(matchId, 1, StrLen(gpuDeviceID)) != gpuDeviceID)
+            continue
+
+        ; Read qwMemorySize as raw QWORD via API (RegRead can't handle REG_QWORD reliably)
+        vram := RegReadQWORD(subKey, "HardwareInformation.qwMemorySize")
+        if (vram > 0)
+            return vram
+    }
+
+    ; Fallback for integrated GPUs: use WMI AdapterRAM (uint32, caps at 4 GB)
+    return adapterRAM
+}
+
+FormatDriverDate(raw) {
+    ; WMI returns yyyyMMddHHmmss.ffffff+zzz — extract a clean date
+    if (StrLen(raw) >= 8)
+        return SubStr(raw, 1, 4) "-" SubStr(raw, 5, 2) "-" SubStr(raw, 7, 2)
+    return raw
 }
 
 ; ─── Disks ──────────────────────────────────────────────────────
