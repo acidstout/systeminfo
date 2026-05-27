@@ -3,7 +3,7 @@
 ;@Ahk2Exe-SetDescription Comprehensive hardware & software report with export
 ;@Ahk2Exe-SetCompanyName Rekow IT
 ;@Ahk2Exe-SetCopyright Copyright © 2026 Rekow IT
-;@Ahk2Exe-SetVersion 1.0
+;@Ahk2Exe-SetVersion 1.3
 ;@Ahk2Exe-SetLanguage 0x0807
 #Requires AutoHotkey v2.0
 #SingleInstance Force
@@ -11,12 +11,16 @@
 SetWorkingDir(A_ScriptDir)
 
 ; ─── Global state ───────────────────────────────────────────────
-global AllData := Map()
-global GuiCtx  := {}
-global Lang    := ""
-global Strings := Map()
-global AppVersion := "SystemInfo v1.0`n`n"
-global AppCopyright := "`n`nCopyright © 2026 by Rekow IT`n`nhttps://rekow.ch"
+global APP_VERSION   := "1.3.0"
+global APP_COPYRIGHT := "`n`nCopyright © 2026 by Rekow IT`n`nhttps://rekow.ch"
+global GITHUB_REPO   := "acidstout/systeminfo"
+global AllData       := Map()
+global GuiCtx        := {}
+global Lang          := ""
+global Strings       := Map()
+global WmiCimv2      := ""
+global WmiRootWmi    := ""
+global SharedOSData  := ""
 
 ; ─── Detect language and initialize strings ─────────────────────
 InitLanguage()
@@ -47,7 +51,7 @@ InitLanguage() {
 }
 
 InitEnglish() {
-    global Strings, AppVersion, AppCopyright
+    global Strings
     ; ─── Window / chrome ────────────────────────────────────────
     Strings["win_title"]          := "SystemInfo — Hardware & Software Report"
     Strings["header"]             := "⬢  System Information Report"
@@ -56,8 +60,23 @@ InitEnglish() {
     Strings["btn_clipboard"]      := "📋  Copy to Clipboard"
     Strings["btn_refresh"]        := "🔄  Refresh Data"
     Strings["btn_about"]          := "ℹ  About"
-    Strings["about_text"]         := AppVersion "Comprehensive system information viewer" AppCopyright
+    Strings["btn_update"]         := "⬆  Update"
+    Strings["about_text"]         := "SystemInfo v" . APP_VERSION . "`n`nComprehensive system information viewer" . APP_COPYRIGHT
     Strings["about_title"]        := "About SystemInfo"
+    Strings["upd_checking"]       := "Checking for updates…"
+    Strings["upd_available"]      := "Update available!"
+    Strings["upd_current"]        := "Current version"
+    Strings["upd_latest"]         := "Latest version"
+    Strings["upd_confirm"]        := "Do you want to download and install the update?`nThe application will restart automatically."
+    Strings["upd_downloading"]    := "Downloading update…"
+    Strings["upd_success"]        := "Update installed successfully!`nThe application will now restart."
+    Strings["upd_success_title"]  := "Update Complete"
+    Strings["upd_noupdate"]       := "You are running the latest version ({1})."
+    Strings["upd_noupdate_title"] := "No Update Available"
+    Strings["upd_error"]          := "Update check failed:"
+    Strings["upd_error_title"]    := "Update Error"
+    Strings["upd_dl_error"]       := "Download failed:"
+    Strings["upd_dl_error_title"] := "Download Error"
     Strings["sb_starting"]        := "  ⏳  Starting up…"
     Strings["sb_collecting"]      := "  ⏳  Collecting system information…"
     Strings["sb_done"]            := "  ✓  {1} properties collected across {2} categories     |     {3}"
@@ -276,7 +295,7 @@ InitEnglish() {
 }
 
 InitGerman() {
-    global Strings, AppVersion, AppCopyright
+    global Strings
     ; ─── Fenster / Oberfläche ───────────────────────────────────
     Strings["win_title"]          := "SystemInfo — Hardware- & Software-Bericht"
     Strings["header"]             := "⬢  Systeminformationsbericht"
@@ -285,8 +304,23 @@ InitGerman() {
     Strings["btn_clipboard"]      := "📋  In Zwischenablage"
     Strings["btn_refresh"]        := "🔄  Aktualisieren"
     Strings["btn_about"]          := "ℹ  Info"
-    Strings["about_text"]         := AppVersion "Umfassende Systeminformationsanzeige" AppCopyright
+    Strings["btn_update"]         := "⬆  Update"
+    Strings["about_text"]         := "SystemInfo v" . APP_VERSION . "`n`nUmfassende Systeminformationsanzeige" . APP_COPYRIGHT
     Strings["about_title"]        := "Über SystemInfo"
+    Strings["upd_checking"]       := "Suche nach Updates…"
+    Strings["upd_available"]      := "Update verfügbar!"
+    Strings["upd_current"]        := "Aktuelle Version"
+    Strings["upd_latest"]         := "Neueste Version"
+    Strings["upd_confirm"]        := "Möchten Sie das Update herunterladen und installieren?`nDie Anwendung wird automatisch neu gestartet."
+    Strings["upd_downloading"]    := "Update wird heruntergeladen…"
+    Strings["upd_success"]        := "Update erfolgreich installiert!`nDie Anwendung wird jetzt neu gestartet."
+    Strings["upd_success_title"]  := "Update abgeschlossen"
+    Strings["upd_noupdate"]       := "Sie verwenden bereits die neueste Version ({1})."
+    Strings["upd_noupdate_title"] := "Kein Update verfügbar"
+    Strings["upd_error"]          := "Update-Prüfung fehlgeschlagen:"
+    Strings["upd_error_title"]    := "Update-Fehler"
+    Strings["upd_dl_error"]       := "Download fehlgeschlagen:"
+    Strings["upd_dl_error_title"] := "Download-Fehler"
     Strings["sb_starting"]        := "  ⏳  Wird gestartet…"
     Strings["sb_collecting"]      := "  ⏳  Systeminformationen werden gesammelt…"
     Strings["sb_done"]            := "  ✓  {1} Eigenschaften in {2} Kategorien erfasst     |     {3}"
@@ -544,8 +578,7 @@ DoDataLoad() {
         }
     }
 
-    CollectAllData()
-    PopulateAllTabs(ctx.tabKeys, ctx.listViews)
+    CollectAllDataProgressive()
 
     totalItems := 0
     for key, arr in AllData
@@ -556,6 +589,23 @@ DoDataLoad() {
     ctx.btnExport.Opt("-Disabled")
     ctx.btnClipboard.Opt("-Disabled")
     ctx.btnRefresh.Opt("-Disabled")
+}
+
+; Populate a single tab's ListView immediately after its data is ready
+PopulateSingleTab(key) {
+    global AllData, GuiCtx
+    if (!GuiCtx.listViews.Has(key) || !AllData.Has(key))
+        return
+    lv := GuiCtx.listViews[key]
+    lv.Delete()
+    for entry in AllData[key] {
+        label := entry[1]
+        val   := entry[2]
+        if (SubStr(label, 1, 3) = "───")
+            lv.Add("", label, val)
+        else
+            lv.Add("", "  " . label, val)
+    }
 }
 
 PopulateAllTabs(tabKeys, listViews) {
@@ -579,71 +629,128 @@ PopulateAllTabs(tabKeys, listViews) {
 }
 
 ; ═══════════════════════════════════════════════════════════════
-;  DATA COLLECTION
+;  DATA COLLECTION — optimized with cached WMI and shared queries
 ; ═══════════════════════════════════════════════════════════════
 
-CollectAllData() {
+; Cache WMI service connections to avoid repeated COM setup overhead.
+; A single ComObjGet("winmgmts:") takes ~50-100ms; with 23 queries
+; that alone adds 1-2 seconds. Caching cuts it to one per namespace.
+
+GetWmiCimv2() {
+    global WmiCimv2
+    if (!IsObject(WmiCimv2))
+        WmiCimv2 := ComObjGet("winmgmts:")
+    return WmiCimv2
+}
+
+GetWmiRootWmi() {
+    global WmiRootWmi
+    if (!IsObject(WmiRootWmi))
+        WmiRootWmi := ComObjGet("winmgmts:\\.\root\wmi")
+    return WmiRootWmi
+}
+
+ResetWmiCache() {
+    global WmiCimv2, WmiRootWmi, SharedOSData
+    WmiCimv2    := ""
+    WmiRootWmi  := ""
+    SharedOSData := ""
+}
+
+; Query Win32_OperatingSystem once, cache the result object
+GetSharedOSData() {
+    global SharedOSData
+    if (!IsObject(SharedOSData)) {
+        try {
+            for obj in GetWmiCimv2().ExecQuery("SELECT * FROM Win32_OperatingSystem")
+                SharedOSData := obj
+        }
+    }
+    return SharedOSData
+}
+
+; Progressive collection: fetch each category and immediately
+; populate its tab so the user sees results streaming in.
+CollectAllDataProgressive() {
     global AllData
-    AllData["OS"]        := GetOSInfo()
-    AllData["CPU"]       := GetCPUInfo()
-    AllData["Memory"]    := GetMemoryInfo()
-    AllData["GPU"]       := GetGPUInfo()
-    AllData["Disks"]     := GetDiskInfo()
-    AllData["Network"]   := GetNetworkInfo()
-    AllData["Mainboard"] := GetMainboardInfo()
-    AllData["Audio"]     := GetAudioInfo()
-    AllData["Printers"]  := GetPrinterInfo()
-    AllData["Peripherals"] := GetPeripheralInfo()
+
+    ResetWmiCache()
+
+    ; Pre-fetch the shared OS data (used by OS + Memory tabs)
+    GetSharedOSData()
+
+    ; Collect and display each tab progressively
+    categories := [
+        ["OS",          GetOSInfo.Bind()],
+        ["CPU",         GetCPUInfo.Bind()],
+        ["Memory",      GetMemoryInfo.Bind()],
+        ["GPU",         GetGPUInfo.Bind()],
+        ["Disks",       GetDiskInfo.Bind()],
+        ["Network",     GetNetworkInfo.Bind()],
+        ["Mainboard",   GetMainboardInfo.Bind()],
+        ["Audio",       GetAudioInfo.Bind()],
+        ["Printers",    GetPrinterInfo.Bind()],
+        ["Peripherals", GetPeripheralInfo.Bind()]
+    ]
+
+    for cat in categories {
+        key      := cat[1]
+        collector := cat[2]
+        AllData[key] := collector.Call()
+        PopulateSingleTab(key)
+    }
+
+    ResetWmiCache()
 }
 
 ; ─── OS & System ────────────────────────────────────────────────
 GetOSInfo() {
     info := []
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_OperatingSystem") {
-            info.Push([T("os_name"), obj.Caption])
-            info.Push([T("os_version"), obj.Version])
-            info.Push([T("os_build"), obj.BuildNumber])
-            info.Push([T("os_arch"), obj.OSArchitecture])
-            info.Push([T("os_install"), FormatWmiDate(obj.InstallDate)])
-            info.Push([T("os_boot"), FormatWmiDate(obj.LastBootUpTime)])
-            info.Push([T("os_sysdir"), obj.SystemDirectory])
-            info.Push([T("os_windir"), obj.WindowsDirectory])
-            info.Push([T("os_user_reg"), obj.RegisteredUser])
-            info.Push([T("os_serial"), obj.SerialNumber])
+        obj := GetSharedOSData()
+        if (IsObject(obj)) {
+            ; Snapshot all values from the COM object first
+            d := Map()
+            d["Caption"] := obj.Caption, d["Version"] := obj.Version
+            d["BuildNumber"] := obj.BuildNumber, d["OSArchitecture"] := obj.OSArchitecture
+            d["InstallDate"] := obj.InstallDate, d["LastBootUpTime"] := obj.LastBootUpTime
+            d["SystemDirectory"] := obj.SystemDirectory, d["WindowsDirectory"] := obj.WindowsDirectory
+            d["RegisteredUser"] := obj.RegisteredUser, d["SerialNumber"] := obj.SerialNumber
+
+            info.Push([T("os_name"), d["Caption"]])
+            info.Push([T("os_version"), d["Version"]])
+            info.Push([T("os_build"), d["BuildNumber"]])
+            info.Push([T("os_arch"), d["OSArchitecture"]])
+            info.Push([T("os_install"), FormatWmiDate(d["InstallDate"])])
+            info.Push([T("os_boot"), FormatWmiDate(d["LastBootUpTime"])])
+            info.Push([T("os_sysdir"), d["SystemDirectory"]])
+            info.Push([T("os_windir"), d["WindowsDirectory"]])
+            info.Push([T("os_user_reg"), d["RegisteredUser"]])
+            info.Push([T("os_serial"), d["SerialNumber"]])
             try {
-                bootRaw := obj.LastBootUpTime
+                bootRaw := d["LastBootUpTime"]
                 if (bootRaw != "") {
-                    bootYear  := SubStr(bootRaw, 1, 4)
-                    bootMonth := SubStr(bootRaw, 5, 2)
-                    bootDay   := SubStr(bootRaw, 7, 2)
-                    bootHour  := SubStr(bootRaw, 9, 2)
-                    bootMin   := SubStr(bootRaw, 11, 2)
-                    bootSec   := SubStr(bootRaw, 13, 2)
-                    bootTS := DateDiff(A_Now, bootYear . bootMonth . bootDay . bootHour . bootMin . bootSec, "Seconds")
-                    days  := bootTS // 86400
-                    hours := Mod(bootTS, 86400) // 3600
-                    mins  := Mod(bootTS, 3600) // 60
-                    info.Push([T("os_uptime"), days . "d " . hours . "h " . mins . "m"])
+                    bootTS := DateDiff(A_Now, SubStr(bootRaw,1,4) . SubStr(bootRaw,5,2) . SubStr(bootRaw,7,2) . SubStr(bootRaw,9,2) . SubStr(bootRaw,11,2) . SubStr(bootRaw,13,2), "Seconds")
+                    info.Push([T("os_uptime"), (bootTS // 86400) . "d " . (Mod(bootTS, 86400) // 3600) . "h " . (Mod(bootTS, 3600) // 60) . "m"])
                 }
             }
         }
     }
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_ComputerSystem") {
-            info.Push([T("os_hostname"), obj.Name])
-            info.Push([T("os_domain"), obj.Domain])
-            info.Push([T("os_manufacturer"), obj.Manufacturer])
-            info.Push([T("os_model"), obj.Model])
-            info.Push([T("os_systype"), obj.SystemType])
-            totalRAM := Round(obj.TotalPhysicalMemory / (1024**3), 1)
-            info.Push([T("os_totalram"), totalRAM . " GB"])
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_ComputerSystem", ["Name","Domain","Manufacturer","Model","SystemType","TotalPhysicalMemory"])
+        for d in rows {
+            info.Push([T("os_hostname"), d["Name"]])
+            info.Push([T("os_domain"), d["Domain"]])
+            info.Push([T("os_manufacturer"), d["Manufacturer"]])
+            info.Push([T("os_model"), d["Model"]])
+            info.Push([T("os_systype"), d["SystemType"]])
+            info.Push([T("os_totalram"), Round(d["TotalPhysicalMemory"] / (1024**3), 1) . " GB"])
         }
     }
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_TimeZone") {
-            info.Push([T("os_timezone"), obj.Caption])
-        }
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_TimeZone", ["Caption"])
+        for d in rows
+            info.Push([T("os_timezone"), d["Caption"]])
     }
     info.Push([T("os_curuser"), A_UserName])
     info.Push([T("os_locale"), Format("0x{:04X}", DllCall("GetUserDefaultUILanguage", "UShort"))])
@@ -654,19 +761,20 @@ GetOSInfo() {
 GetCPUInfo() {
     info := []
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_Processor") {
-            info.Push([T("cpu_name"), Trim(obj.Name)])
-            info.Push([T("cpu_mfg"), obj.Manufacturer])
-            info.Push([T("cpu_desc"), obj.Description])
-            info.Push([T("cpu_cores"), String(obj.NumberOfCores)])
-            info.Push([T("cpu_threads"), String(obj.NumberOfLogicalProcessors)])
-            info.Push([T("cpu_baseclock"), obj.MaxClockSpeed . " MHz"])
-            info.Push([T("cpu_curclock"), obj.CurrentClockSpeed . " MHz"])
-            info.Push([T("cpu_l2"), FormatBytes(obj.L2CacheSize * 1024)])
-            info.Push([T("cpu_l3"), FormatBytes(obj.L3CacheSize * 1024)])
-            info.Push([T("cpu_socket"), obj.SocketDesignation])
-            info.Push([T("cpu_voltage"), Round(obj.CurrentVoltage / 10, 2) . " V"])
-            info.Push([T("cpu_status"), obj.Status])
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_Processor", ["Name","Manufacturer","Description","NumberOfCores","NumberOfLogicalProcessors","MaxClockSpeed","CurrentClockSpeed","L2CacheSize","L3CacheSize","SocketDesignation","CurrentVoltage","Status"])
+        for d in rows {
+            info.Push([T("cpu_name"), Trim(d["Name"])])
+            info.Push([T("cpu_mfg"), d["Manufacturer"]])
+            info.Push([T("cpu_desc"), d["Description"]])
+            info.Push([T("cpu_cores"), String(d["NumberOfCores"])])
+            info.Push([T("cpu_threads"), String(d["NumberOfLogicalProcessors"])])
+            info.Push([T("cpu_baseclock"), d["MaxClockSpeed"] . " MHz"])
+            info.Push([T("cpu_curclock"), d["CurrentClockSpeed"] . " MHz"])
+            info.Push([T("cpu_l2"), FormatBytes(d["L2CacheSize"] * 1024)])
+            info.Push([T("cpu_l3"), FormatBytes(d["L3CacheSize"] * 1024)])
+            info.Push([T("cpu_socket"), d["SocketDesignation"]])
+            info.Push([T("cpu_voltage"), Round(d["CurrentVoltage"] / 10, 2) . " V"])
+            info.Push([T("cpu_status"), d["Status"]])
         }
     }
     return info
@@ -676,33 +784,37 @@ GetCPUInfo() {
 GetMemoryInfo() {
     info := []
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_OperatingSystem") {
-            totalVis := Round(obj.TotalVisibleMemorySize / (1024**2), 2)
-            freeVis  := Round(obj.FreePhysicalMemory / (1024**2), 2)
+        obj := GetSharedOSData()
+        if (IsObject(obj)) {
+            tv := obj.TotalVisibleMemorySize, fv := obj.FreePhysicalMemory
+            tvs := obj.TotalVirtualMemorySize, fvs := obj.FreeVirtualMemory
+            totalVis := Round(tv / (1024**2), 2)
+            freeVis  := Round(fv / (1024**2), 2)
             usedVis  := Round(totalVis - freeVis, 2)
             pctUsed  := Round((usedVis / totalVis) * 100, 1)
             info.Push([T("mem_total"), totalVis . " GB"])
             info.Push([T("mem_used"), usedVis . " GB (" . pctUsed . "%)"])
             info.Push([T("mem_avail"), freeVis . " GB"])
-            info.Push([T("mem_vtotal"), Round(obj.TotalVirtualMemorySize / (1024**2), 2) . " GB"])
-            info.Push([T("mem_vfree"), Round(obj.FreeVirtualMemory / (1024**2), 2) . " GB"])
+            info.Push([T("mem_vtotal"), Round(tvs / (1024**2), 2) . " GB"])
+            info.Push([T("mem_vfree"), Round(fvs / (1024**2), 2) . " GB"])
+			info.Push(["", ""])
             info.Push([T("mem_dimm_hdr"), ""])
         }
     }
     slotNum := 0
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_PhysicalMemory") {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_PhysicalMemory", ["Capacity","ConfiguredClockSpeed","Manufacturer","PartNumber","FormFactor","SMBIOSMemoryType","BankLabel","DeviceLocator"])
+        for d in rows {
             slotNum++
-            cap := Round(obj.Capacity / (1024**3), 1)
             slotPfx := "Slot " . slotNum . " — "
-            info.Push([slotPfx . T("mem_capacity"), cap . " GB"])
-            info.Push([slotPfx . T("mem_speed"), String(obj.ConfiguredClockSpeed) . " MHz"])
-            info.Push([slotPfx . T("mem_mfg"), obj.Manufacturer])
-            info.Push([slotPfx . T("mem_part"), Trim(obj.PartNumber)])
-            info.Push([slotPfx . T("mem_form"), GetMemFormFactor(obj.FormFactor)])
-            info.Push([slotPfx . T("mem_type"), GetMemType(obj.SMBIOSMemoryType)])
-            info.Push([slotPfx . T("mem_bank"), obj.BankLabel . " / " . obj.DeviceLocator])
-            if (slotNum > 1)
+            info.Push([slotPfx . T("mem_capacity"), Round(d["Capacity"] / (1024**3), 1) . " GB"])
+            info.Push([slotPfx . T("mem_speed"), String(d["ConfiguredClockSpeed"]) . " MHz"])
+            info.Push([slotPfx . T("mem_mfg"), d["Manufacturer"]])
+            info.Push([slotPfx . T("mem_part"), Trim(d["PartNumber"])])
+            info.Push([slotPfx . T("mem_form"), GetMemFormFactor(d["FormFactor"])])
+            info.Push([slotPfx . T("mem_type"), GetMemType(d["SMBIOSMemoryType"])])
+            info.Push([slotPfx . T("mem_bank"), d["BankLabel"] . " / " . d["DeviceLocator"]])
+            if (slotNum >= 1)
                 info.Push(["", ""])
         }
     }
@@ -735,24 +847,25 @@ GetGPUInfo() {
     info := []
     gpuNum := 0
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_VideoController") {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_VideoController", ["Name","AdapterCompatibility","DriverVersion","DriverDate","AdapterRAM","VideoModeDescription","CurrentHorizontalResolution","CurrentVerticalResolution","CurrentRefreshRate","CurrentBitsPerPixel","Status","PNPDeviceID"])
+        for d in rows {
             gpuNum++
             if (gpuNum > 1)
                 info.Push(["─── GPU " . gpuNum . " ───", ""])
-            info.Push([T("gpu_name"), obj.Name])
-            info.Push([T("gpu_compat"), obj.AdapterCompatibility])
-            info.Push([T("gpu_driver"), obj.DriverVersion])
-            info.Push([T("gpu_driverdate"), FormatWmiDate(obj.DriverDate)])
-            vram := Round(obj.AdapterRAM / (1024**3), 1)
+            info.Push([T("gpu_name"), d["Name"]])
+            info.Push([T("gpu_compat"), d["AdapterCompatibility"]])
+            info.Push([T("gpu_driver"), d["DriverVersion"]])
+            info.Push([T("gpu_driverdate"), FormatWmiDate(d["DriverDate"])])
+            vram := Round(d["AdapterRAM"] / (1024**3), 1)
             if (vram <= 0)
                 vram := ">4 (WMI limit)"
             info.Push([T("gpu_vram"), vram . (IsNumber(vram) ? " GB" : "")])
-            info.Push([T("gpu_vidmode"), obj.VideoModeDescription])
-            info.Push([T("gpu_res"), obj.CurrentHorizontalResolution . " × " . obj.CurrentVerticalResolution])
-            info.Push([T("gpu_refresh"), obj.CurrentRefreshRate . " Hz"])
-            info.Push([T("gpu_bpp"), String(obj.CurrentBitsPerPixel)])
-            info.Push([T("gpu_status"), obj.Status])
-            info.Push([T("gpu_pnp"), obj.PNPDeviceID])
+            info.Push([T("gpu_vidmode"), d["VideoModeDescription"]])
+            info.Push([T("gpu_res"), d["CurrentHorizontalResolution"] . " × " . d["CurrentVerticalResolution"]])
+            info.Push([T("gpu_refresh"), d["CurrentRefreshRate"] . " Hz"])
+            info.Push([T("gpu_bpp"), String(d["CurrentBitsPerPixel"])])
+            info.Push([T("gpu_status"), d["Status"]])
+            info.Push([T("gpu_pnp"), d["PNPDeviceID"]])
         }
     }
 
@@ -811,10 +924,11 @@ GetGPUInfo() {
             sortedMons.Push(m)
     }
 
+    ; Snapshot WmiMonitorID and WmiMonitorConnectionParams into maps
     edidNames := Map()
     connTypes := Map()
     try {
-        for obj in ComObjGet("winmgmts:\\.\root\wmi").ExecQuery("SELECT * FROM WmiMonitorID") {
+        for obj in GetWmiRootWmi().ExecQuery("SELECT * FROM WmiMonitorID") {
             pathKey := NormalizeInstancePath(obj.InstanceName)
             edidNames[pathKey] := {
                 name:     DecodeWmiUint16Array(obj.UserFriendlyName),
@@ -825,7 +939,7 @@ GetGPUInfo() {
         }
     }
     try {
-        for obj in ComObjGet("winmgmts:\\.\root\wmi").ExecQuery("SELECT * FROM WmiMonitorConnectionParams") {
+        for obj in GetWmiRootWmi().ExecQuery("SELECT * FROM WmiMonitorConnectionParams") {
             pathKey := NormalizeInstancePath(obj.InstanceName)
             connTypes[pathKey] := GetVideoOutputType(obj.VideoOutputTechnology)
         }
@@ -835,6 +949,7 @@ GetGPUInfo() {
     for m in sortedMons {
         monNum++
         primaryTag := m.isPrimary ? ("  ★ " . T("mon_primary")) : ""
+		info.Push(["", ""])
         info.Push(["─── Monitor " . monNum . primaryTag . " ───", ""])
 
         monPathKey := NormalizeDeviceId(m.deviceId)
@@ -883,16 +998,12 @@ GetGPUInfo() {
 
 NormalizeInstancePath(instName) {
     parts := StrSplit(instName, "\")
-    if (parts.Length >= 2)
-        return parts[2]
-    return instName
+    return (parts.Length >= 2) ? parts[2] : instName
 }
 
 NormalizeDeviceId(devId) {
     parts := StrSplit(devId, "\")
-    if (parts.Length >= 2)
-        return parts[2]
-    return devId
+    return (parts.Length >= 2) ? parts[2] : devId
 }
 
 DecodeWmiUint16Array(arr) {
@@ -923,32 +1034,34 @@ GetDiskInfo() {
     info := []
     diskNum := 0
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_DiskDrive") {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_DiskDrive", ["Model","InterfaceType","SerialNumber","FirmwareRevision","Size","MediaType","Partitions","Status"])
+        for d in rows {
             diskNum++
             if (diskNum > 1)
                 info.Push(["", ""])
             info.Push(["─── Physical Disk " . diskNum . " ───", ""])
-            info.Push([T("disk_model"), obj.Model])
-            info.Push([T("disk_iface"), obj.InterfaceType])
-            info.Push([T("disk_serial"), Trim(obj.SerialNumber)])
-            info.Push([T("disk_fw"), obj.FirmwareRevision])
-            info.Push([T("disk_size"), FormatBytes(obj.Size)])
-            info.Push([T("disk_media"), obj.MediaType])
-            info.Push([T("disk_parts"), String(obj.Partitions)])
-            info.Push([T("disk_status"), obj.Status])
+            info.Push([T("disk_model"), d["Model"]])
+            info.Push([T("disk_iface"), d["InterfaceType"]])
+            info.Push([T("disk_serial"), Trim(d["SerialNumber"])])
+            info.Push([T("disk_fw"), d["FirmwareRevision"]])
+            info.Push([T("disk_size"), FormatBytes(d["Size"])])
+            info.Push([T("disk_media"), d["MediaType"]])
+            info.Push([T("disk_parts"), String(d["Partitions"])])
+            info.Push([T("disk_status"), d["Status"]])
         }
     }
     info.Push(["", ""])
     info.Push([T("disk_vol_hdr"), ""])
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_LogicalDisk WHERE DriveType=3") {
-            letter := obj.DeviceID
-            total  := obj.Size
-            free   := obj.FreeSpace
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_LogicalDisk WHERE DriveType=3", ["DeviceID","FileSystem","VolumeName","Size","FreeSpace"])
+        for d in rows {
+            letter := d["DeviceID"]
+            total  := d["Size"]
+            free   := d["FreeSpace"]
             used   := total - free
             pct    := (total > 0) ? Round((used / total) * 100, 1) : 0
-            info.Push([letter . " — " . T("disk_fs"), obj.FileSystem])
-            info.Push([letter . " — " . T("disk_label"), (obj.VolumeName != "") ? obj.VolumeName : T("disk_nolabel")])
+            info.Push([letter . " — " . T("disk_fs"), d["FileSystem"]])
+            info.Push([letter . " — " . T("disk_label"), (d["VolumeName"] != "") ? d["VolumeName"] : T("disk_nolabel")])
             info.Push([letter . " — " . T("disk_total"), FormatBytes(total)])
             info.Push([letter . " — " . T("disk_used"), FormatBytes(used) . "  (" . pct . "%)"])
             info.Push([letter . " — " . T("disk_free"), FormatBytes(free)])
@@ -970,55 +1083,71 @@ GetDiskInfo() {
 GetNetworkInfo() {
     info := []
     adapterNum := 0
+    snapshots := []
     try {
-        query := "SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=TRUE"
-        for obj in ComObjGet("winmgmts:").ExecQuery(query) {
-            adapterNum++
-            if (adapterNum > 1)
-                info.Push(["", ""])
-            info.Push(["─── Adapter " . adapterNum . " ───", ""])
-            info.Push([T("net_desc"), obj.Description])
-            info.Push([T("net_mac"), obj.MACAddress])
+        ; Network adapters have array properties (IPAddress, IPSubnet, etc.)
+        ; that WmiCollect can't handle generically, so snapshot manually
+        resultSet := GetWmiCimv2().ExecQuery("SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=TRUE")
+        for obj in resultSet {
             try {
-                ips := obj.IPAddress
-                if (IsObject(ips)) {
-                    ipList := ""
-                    for idx, ip in ips
-                        ipList .= (ipList != "" ? ", " : "") . ip
-                    info.Push([T("net_ip"), ipList])
+                d := Map()
+                d["Description"] := obj.Description
+                d["MACAddress"] := obj.MACAddress
+                d["DHCPEnabled"] := obj.DHCPEnabled
+                d["DHCPServer"] := ""
+                try d["DHCPServer"] := obj.DHCPServer
+                d["IPAddress"] := "", d["IPSubnet"] := "", d["Gateway"] := "", d["DNS"] := ""
+                try {
+                    a := obj.IPAddress
+                    if (IsObject(a)) {
+                        for idx, v in a
+                            d["IPAddress"] .= (d["IPAddress"] != "" ? ", " : "") . v
+                    }
                 }
-            }
-            try {
-                subs := obj.IPSubnet
-                if (IsObject(subs)) {
-                    subList := ""
-                    for idx, s in subs
-                        subList .= (subList != "" ? ", " : "") . s
-                    info.Push([T("net_subnet"), subList])
+                try {
+                    a := obj.IPSubnet
+                    if (IsObject(a)) {
+                        for idx, v in a
+                            d["IPSubnet"] .= (d["IPSubnet"] != "" ? ", " : "") . v
+                    }
                 }
-            }
-            try {
-                gws := obj.DefaultIPGateway
-                if (IsObject(gws)) {
-                    gwList := ""
-                    for idx, g in gws
-                        gwList .= (gwList != "" ? ", " : "") . g
-                    info.Push([T("net_gw"), gwList])
+                try {
+                    a := obj.DefaultIPGateway
+                    if (IsObject(a)) {
+                        for idx, v in a
+                            d["Gateway"] .= (d["Gateway"] != "" ? ", " : "") . v
+                    }
                 }
-            }
-            try {
-                dns := obj.DNSServerSearchOrder
-                if (IsObject(dns)) {
-                    dnsList := ""
-                    for idx, d in dns
-                        dnsList .= (dnsList != "" ? ", " : "") . d
-                    info.Push([T("net_dns"), dnsList])
+                try {
+                    a := obj.DNSServerSearchOrder
+                    if (IsObject(a)) {
+                        for idx, v in a
+                            d["DNS"] .= (d["DNS"] != "" ? ", " : "") . v
+                    }
                 }
+                snapshots.Push(d)
             }
-            info.Push([T("net_dhcp"), obj.DHCPEnabled ? T("yes") : T("no")])
-            if (obj.DHCPEnabled)
-                info.Push([T("net_dhcpsrv"), obj.DHCPServer])
         }
+    }
+    ; Format from snapshots (outside try)
+    for d in snapshots {
+        adapterNum++
+        if (adapterNum > 1)
+            info.Push(["", ""])
+        info.Push(["─── Adapter " . adapterNum . " ───", ""])
+        info.Push([T("net_desc"), d["Description"]])
+        info.Push([T("net_mac"), d["MACAddress"]])
+        if (d["IPAddress"] != "")
+            info.Push([T("net_ip"), d["IPAddress"]])
+        if (d["IPSubnet"] != "")
+            info.Push([T("net_subnet"), d["IPSubnet"]])
+        if (d["Gateway"] != "")
+            info.Push([T("net_gw"), d["Gateway"]])
+        if (d["DNS"] != "")
+            info.Push([T("net_dns"), d["DNS"]])
+        info.Push([T("net_dhcp"), d["DHCPEnabled"] ? T("yes") : T("no")])
+        if (d["DHCPEnabled"] && d["DHCPServer"] != "")
+            info.Push([T("net_dhcpsrv"), d["DHCPServer"]])
     }
     return info
 }
@@ -1027,22 +1156,24 @@ GetNetworkInfo() {
 GetMainboardInfo() {
     info := []
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_BaseBoard") {
-            info.Push([T("mb_mfg"), obj.Manufacturer])
-            info.Push([T("mb_product"), obj.Product])
-            info.Push([T("mb_version"), obj.Version])
-            info.Push([T("mb_serial"), obj.SerialNumber])
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_BaseBoard", ["Manufacturer","Product","Version","SerialNumber"])
+        for d in rows {
+            info.Push([T("mb_mfg"), d["Manufacturer"]])
+            info.Push([T("mb_product"), d["Product"]])
+            info.Push([T("mb_version"), d["Version"]])
+            info.Push([T("mb_serial"), d["SerialNumber"]])
         }
     }
     info.Push(["", ""])
     info.Push([T("bios_hdr"), ""])
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_BIOS") {
-            info.Push([T("bios_mfg"), obj.Manufacturer])
-            info.Push([T("bios_ver"), obj.SMBIOSBIOSVersion])
-            info.Push([T("bios_date"), FormatWmiDate(obj.ReleaseDate)])
-            info.Push([T("bios_smbios"), obj.SMBIOSMajorVersion . "." . obj.SMBIOSMinorVersion])
-            info.Push([T("bios_serial"), obj.SerialNumber])
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_BIOS", ["Manufacturer","SMBIOSBIOSVersion","ReleaseDate","SMBIOSMajorVersion","SMBIOSMinorVersion","SerialNumber"])
+        for d in rows {
+            info.Push([T("bios_mfg"), d["Manufacturer"]])
+            info.Push([T("bios_ver"), d["SMBIOSBIOSVersion"]])
+            info.Push([T("bios_date"), FormatWmiDate(d["ReleaseDate"])])
+            info.Push([T("bios_smbios"), d["SMBIOSMajorVersion"] . "." . d["SMBIOSMinorVersion"]])
+            info.Push([T("bios_serial"), d["SerialNumber"]])
         }
     }
     info.Push(["", ""])
@@ -1051,9 +1182,10 @@ GetMainboardInfo() {
         tpmFound := false
         for obj in ComObjGet("winmgmts:\\.\root\cimv2\Security\MicrosoftTpm").ExecQuery("SELECT * FROM Win32_Tpm") {
             tpmFound := true
+            mfg := obj.ManufacturerIdTxt, ver := obj.SpecVersion
             info.Push([T("tpm_present"), T("yes")])
-            info.Push([T("tpm_mfg"), obj.ManufacturerIdTxt])
-            info.Push([T("tpm_ver"), obj.SpecVersion])
+            info.Push([T("tpm_mfg"), mfg])
+            info.Push([T("tpm_ver"), ver])
         }
         if (!tpmFound)
             info.Push(["TPM", T("tpm_no")])
@@ -1068,15 +1200,16 @@ GetAudioInfo() {
     info := []
     devNum := 0
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_SoundDevice") {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_SoundDevice", ["Name","Manufacturer","Status","PNPDeviceID"])
+        for d in rows {
             devNum++
             if (devNum > 1)
                 info.Push(["", ""])
             info.Push(["─── Audio " . devNum . " ───", ""])
-            info.Push([T("audio_name"), obj.Name])
-            info.Push([T("audio_mfg"), obj.Manufacturer])
-            info.Push([T("audio_status"), obj.Status])
-            info.Push([T("audio_pnp"), obj.PNPDeviceID])
+            info.Push([T("audio_name"), d["Name"]])
+            info.Push([T("audio_mfg"), d["Manufacturer"]])
+            info.Push([T("audio_status"), d["Status"]])
+            info.Push([T("audio_pnp"), d["PNPDeviceID"]])
         }
     }
     if (devNum = 0)
@@ -1088,69 +1221,63 @@ GetAudioInfo() {
 GetPrinterInfo() {
     info := []
     prnNum := 0
+    snapshots := []
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_Printer") {
-            prnNum++
-            if (prnNum > 1)
-                info.Push(["", ""])
-
-            ; Mark default printer in header
-            defTag := ""
-            try defTag := obj.Default ? ("  ★ " . T("prn_default")) : ""
-            info.Push(["─── " . obj.Name . defTag . " ───", ""])
-
-            info.Push([T("prn_name"), obj.Name])
-            info.Push([T("prn_driver"), obj.DriverName])
-            info.Push([T("prn_port"), obj.PortName])
-            info.Push([T("prn_default"), obj.Default ? T("yes") : T("no")])
-            info.Push([T("prn_shared"), obj.Shared ? T("yes") : T("no")])
-            if (obj.Shared) {
+        ; Printers have CapabilityDescriptions (array), snapshot manually
+        resultSet := GetWmiCimv2().ExecQuery("SELECT * FROM Win32_Printer")
+        for obj in resultSet {
+            try {
+                d := Map()
+                d["Name"] := obj.Name, d["DriverName"] := obj.DriverName
+                d["PortName"] := obj.PortName, d["Default"] := obj.Default
+                d["Shared"] := obj.Shared, d["Network"] := obj.Network
+                d["PrinterStatus"] := obj.PrinterStatus
+                d["ShareName"] := "", d["Location"] := ""
+                d["HorizontalResolution"] := 0, d["VerticalResolution"] := 0
+                d["HasDuplex"] := false, d["HasColor"] := false
+                try d["ShareName"] := obj.ShareName
+                try d["Location"] := obj.Location
+                try d["HorizontalResolution"] := obj.HorizontalResolution
+                try d["VerticalResolution"] := obj.VerticalResolution
                 try {
-                    if (obj.ShareName != "")
-                        info.Push([T("prn_sharename"), obj.ShareName])
-                }
-            }
-            info.Push([T("prn_network"), obj.Network ? T("yes") : T("no")])
-
-            ; Location
-            try {
-                if (obj.Location != "")
-                    info.Push([T("prn_location"), obj.Location])
-            }
-
-            ; Capabilities
-            try {
-                if (obj.HorizontalResolution > 0)
-                    info.Push([T("prn_horizontal"), obj.HorizontalResolution . " dpi"])
-            }
-            try {
-                if (obj.VerticalResolution > 0)
-                    info.Push([T("prn_vertical"), obj.VerticalResolution . " dpi"])
-            }
-
-            ; Duplex capability
-            try {
-                if (obj.CapabilityDescriptions != "") {
                     capArr := obj.CapabilityDescriptions
                     if (IsObject(capArr)) {
-                        hasDuplex := false
-                        hasColor  := false
                         for idx, cap in capArr {
                             if (InStr(cap, "Duplex"))
-                                hasDuplex := true
+                                d["HasDuplex"] := true
                             if (InStr(cap, "Color"))
-                                hasColor := true
+                                d["HasColor"] := true
                         }
-                        info.Push([T("prn_duplex"), hasDuplex ? T("yes") : T("no")])
-                        info.Push([T("prn_color"), hasColor ? T("yes") : T("no")])
                     }
                 }
+                snapshots.Push(d)
             }
-
-            ; Printer status
-            statusText := GetPrinterStatus(obj.PrinterStatus)
-            info.Push([T("prn_status"), statusText])
         }
+    }
+    ; Format from snapshots (outside try so a single failure doesn't kill all)
+    for d in snapshots {
+        prnNum++
+        if (prnNum > 1)
+            info.Push(["", ""])
+        defTag := d["Default"] ? ("  ★ " . T("prn_default")) : ""
+        info.Push(["─── " . d["Name"] . defTag . " ───", ""])
+        info.Push([T("prn_name"), d["Name"]])
+        info.Push([T("prn_driver"), d["DriverName"]])
+        info.Push([T("prn_port"), d["PortName"]])
+        info.Push([T("prn_default"), d["Default"] ? T("yes") : T("no")])
+        info.Push([T("prn_shared"), d["Shared"] ? T("yes") : T("no")])
+        if (d["Shared"] && d["ShareName"] != "")
+            info.Push([T("prn_sharename"), d["ShareName"]])
+        info.Push([T("prn_network"), d["Network"] ? T("yes") : T("no")])
+        if (d["Location"] != "")
+            info.Push([T("prn_location"), d["Location"]])
+        if (IsNumber(d["HorizontalResolution"]) && d["HorizontalResolution"] > 0)
+            info.Push([T("prn_horizontal"), d["HorizontalResolution"] . " dpi"])
+        if (IsNumber(d["VerticalResolution"]) && d["VerticalResolution"] > 0)
+            info.Push([T("prn_vertical"), d["VerticalResolution"] . " dpi"])
+        info.Push([T("prn_duplex"), d["HasDuplex"] ? T("yes") : T("no")])
+        info.Push([T("prn_color"), d["HasColor"] ? T("yes") : T("no")])
+        info.Push([T("prn_status"), GetPrinterStatus(d["PrinterStatus"])])
     }
     if (prnNum = 0)
         info.Push(["Printers", T("prn_none")])
@@ -1174,14 +1301,15 @@ GetPeripheralInfo() {
     info.Push([T("per_usb_hdr"), ""])
     ctrlNum := 0
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_USBController") {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_USBController", ["Name","Manufacturer","Status"])
+        for d in rows {
             ctrlNum++
             totalDevs++
             if (ctrlNum > 1)
                 info.Push(["", ""])
-            info.Push([T("per_usb_name"), obj.Name])
-            info.Push([T("per_usb_mfg"), obj.Manufacturer])
-            info.Push([T("per_usb_status"), obj.Status])
+            info.Push([T("per_usb_name"), d["Name"]])
+            info.Push([T("per_usb_mfg"), d["Manufacturer"]])
+            info.Push([T("per_usb_status"), d["Status"]])
         }
     }
 
@@ -1190,55 +1318,48 @@ GetPeripheralInfo() {
     info.Push([T("per_usbdev_hdr"), ""])
     usbNum := 0
     try {
-        ; PNPEntity with USB in DeviceID, excluding hubs and controllers (already shown)
-        query := "SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE 'USB\\%' AND NOT Name LIKE '%Hub%' AND NOT Name LIKE '%Controller%' AND NOT Name LIKE '%Composite%'"
-        for obj in ComObjGet("winmgmts:").ExecQuery(query) {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE 'USB\\%' AND NOT Name LIKE '%Hub%' AND NOT Name LIKE '%Controller%' AND NOT Name LIKE '%Composite%'", ["Name","Manufacturer","DeviceID","Status"])
+        for d in rows {
             usbNum++
             totalDevs++
             if (usbNum > 1)
                 info.Push(["", ""])
-            info.Push([T("per_usb_name"), obj.Name])
-            try {
-                if (obj.Manufacturer != "" && obj.Manufacturer != "(Standard USB Host Controller)")
-                    info.Push([T("per_usb_mfg"), obj.Manufacturer])
-            }
-            info.Push([T("per_usb_devid"), obj.DeviceID])
-            info.Push([T("per_usb_status"), obj.Status])
+            info.Push([T("per_usb_name"), d["Name"]])
+            if (d["Manufacturer"] != "" && d["Manufacturer"] != "(Standard USB Host Controller)")
+                info.Push([T("per_usb_mfg"), d["Manufacturer"]])
+            info.Push([T("per_usb_devid"), d["DeviceID"]])
+            info.Push([T("per_usb_status"), d["Status"]])
         }
     }
 
-    ; ── Input Devices (Keyboard, Mouse, Pointing) ───────────────
+    ; ── Input Devices ───────────────────────────────────────────
     info.Push(["", ""])
     info.Push([T("per_input_hdr"), ""])
     inputNum := 0
-
-    ; Keyboards
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_Keyboard") {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_Keyboard", ["Name","Description","Status"])
+        for d in rows {
             inputNum++
             totalDevs++
             if (inputNum > 1)
                 info.Push(["", ""])
-            info.Push([T("per_input_name"), obj.Name])
-            info.Push([T("per_input_desc"), obj.Description])
-            info.Push([T("per_input_status"), obj.Status])
+            info.Push([T("per_input_name"), d["Name"]])
+            info.Push([T("per_input_desc"), d["Description"]])
+            info.Push([T("per_input_status"), d["Status"]])
         }
     }
-
-    ; Pointing devices (mice, trackpads, etc.)
     try {
-        for obj in ComObjGet("winmgmts:").ExecQuery("SELECT * FROM Win32_PointingDevice") {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_PointingDevice", ["Name","Description","DeviceID","Status"])
+        for d in rows {
             inputNum++
             totalDevs++
             if (inputNum > 1)
                 info.Push(["", ""])
-            info.Push([T("per_input_name"), obj.Name])
-            info.Push([T("per_input_desc"), obj.Description])
-            try {
-                if (obj.DeviceID != "")
-                    info.Push([T("per_input_devid"), obj.DeviceID])
-            }
-            info.Push([T("per_input_status"), obj.Status])
+            info.Push([T("per_input_name"), d["Name"]])
+            info.Push([T("per_input_desc"), d["Description"]])
+            if (d["DeviceID"] != "")
+                info.Push([T("per_input_devid"), d["DeviceID"]])
+            info.Push([T("per_input_status"), d["Status"]])
         }
     }
 
@@ -1247,19 +1368,16 @@ GetPeripheralInfo() {
     info.Push([T("per_cam_hdr"), ""])
     camNum := 0
     try {
-        ; Camera devices typically appear under Image or Camera class
-        query := "SELECT * FROM Win32_PnPEntity WHERE PNPClass='Camera' OR PNPClass='Image'"
-        for obj in ComObjGet("winmgmts:").ExecQuery(query) {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_PnPEntity WHERE PNPClass='Camera' OR PNPClass='Image'", ["Name","Manufacturer","Status"])
+        for d in rows {
             camNum++
             totalDevs++
             if (camNum > 1)
                 info.Push(["", ""])
-            info.Push([T("per_cam_name"), obj.Name])
-            try {
-                if (obj.Manufacturer != "")
-                    info.Push([T("per_cam_mfg"), obj.Manufacturer])
-            }
-            info.Push([T("per_cam_status"), obj.Status])
+            info.Push([T("per_cam_name"), d["Name"]])
+            if (d["Manufacturer"] != "")
+                info.Push([T("per_cam_mfg"), d["Manufacturer"]])
+            info.Push([T("per_cam_status"), d["Status"]])
         }
     }
     if (camNum = 0)
@@ -1270,18 +1388,16 @@ GetPeripheralInfo() {
     info.Push([T("per_bt_hdr"), ""])
     btNum := 0
     try {
-        query := "SELECT * FROM Win32_PnPEntity WHERE PNPClass='Bluetooth'"
-        for obj in ComObjGet("winmgmts:").ExecQuery(query) {
+        rows := WmiCollect(GetWmiCimv2(), "SELECT * FROM Win32_PnPEntity WHERE PNPClass='Bluetooth'", ["Name","Manufacturer","Status"])
+        for d in rows {
             btNum++
             totalDevs++
             if (btNum > 1)
                 info.Push(["", ""])
-            info.Push([T("per_bt_name"), obj.Name])
-            try {
-                if (obj.Manufacturer != "")
-                    info.Push([T("per_bt_mfg"), obj.Manufacturer])
-            }
-            info.Push([T("per_bt_status"), obj.Status])
+            info.Push([T("per_bt_name"), d["Name"]])
+            if (d["Manufacturer"] != "")
+                info.Push([T("per_bt_mfg"), d["Manufacturer"]])
+            info.Push([T("per_bt_status"), d["Status"]])
         }
     }
     if (btNum = 0)
@@ -1296,6 +1412,28 @@ GetPeripheralInfo() {
 ;  HELPERS
 ; ═══════════════════════════════════════════════════════════════
 
+; Execute a WMI query and immediately snapshot all requested properties
+; into an array of Maps. This closes the WMI enumerator as fast as possible,
+; freeing the WMI service for the next query. All formatting and processing
+; happens afterwards on plain AHK data at native speed.
+WmiCollect(wmiService, query, properties) {
+    rows := []
+    resultSet := wmiService.ExecQuery(query)
+    for obj in resultSet {
+        try {
+            d := Map()
+            for prop in properties {
+                try
+                    d[prop] := obj.%prop%
+                catch
+                    d[prop] := ""
+            }
+            rows.Push(d)
+        }
+    }
+    return rows
+}
+
 IsRunAsAdmin() {
     return DllCall("shell32\IsUserAnAdmin")
 }
@@ -1303,8 +1441,7 @@ IsRunAsAdmin() {
 FormatWmiDate(raw) {
     if (!raw || raw = "")
         return "N/A"
-    return SubStr(raw, 1, 4) . "-" . SubStr(raw, 5, 2) . "-" . SubStr(raw, 7, 2)
-        . "  " . SubStr(raw, 9, 2) . ":" . SubStr(raw, 11, 2) . ":" . SubStr(raw, 13, 2)
+    return SubStr(raw, 1, 4) . "-" . SubStr(raw, 5, 2) . "-" . SubStr(raw, 7, 2) . "  " . SubStr(raw, 9, 2) . ":" . SubStr(raw, 11, 2) . ":" . SubStr(raw, 13, 2)
 }
 
 FormatBytes(bytes) {
@@ -1352,7 +1489,7 @@ GetTabHeaderHeight(tabCtrl) {
 ; ═══════════════════════════════════════════════════════════════
 
 BuildMainWindow() {
-    global AllData, GuiCtx
+    global GuiCtx
 
     WIN_W       := 820
     WIN_H       := 620
@@ -1360,7 +1497,7 @@ BuildMainWindow() {
     HEADER_H    := 50
     TAB_Y       := MARGIN + HEADER_H
     BTN_H       := 32
-    BTN_W       := 140
+    BTN_W       := 130
     BTN_AREA    := BTN_H + 12
     SB_H        := 22
     LV_PAD_X    := 6
@@ -1429,6 +1566,9 @@ BuildMainWindow() {
     btnAbout := mainGui.AddButton("x+8 y" . btnY . " w" . BTN_W . " h" . BTN_H, T("btn_about"))
     btnAbout.OnEvent("Click", (*) => MsgBox(T("about_text"), T("about_title"), "64"))
 
+    btnUpdate := mainGui.AddButton("x+8 y" . btnY . " w" . BTN_W . " h" . BTN_H, T("btn_update"))
+    btnUpdate.OnEvent("Click", (*) => CheckForUpdate())
+
     ; ─── Status bar ─────────────────────────────────────────────
     sb := mainGui.AddStatusBar()
     sb.SetText(T("sb_starting"))
@@ -1442,6 +1582,7 @@ BuildMainWindow() {
     GuiCtx.btnClipboard := btnClipboard
     GuiCtx.btnRefresh   := btnRefresh
     GuiCtx.btnAbout     := btnAbout
+    GuiCtx.btnUpdate    := btnUpdate
     GuiCtx.sb           := sb
     GuiCtx.MARGIN       := MARGIN
     GuiCtx.HEADER_H     := HEADER_H
@@ -1503,6 +1644,7 @@ OnResize(thisGui, ctx, w, h, minMax) {
         ctx.btnClipboard.Move(, btnY)
         ctx.btnRefresh.Move(, btnY)
         ctx.btnAbout.Move(, btnY)
+        ctx.btnUpdate.Move(, btnY)
     }
 
     DllCall("SendMessage", "Ptr", hwnd, "UInt", 0x000B, "Ptr", 1, "Ptr", 0)
@@ -1537,8 +1679,7 @@ DoRefreshWork() {
     global AllData, GuiCtx
     ctx := GuiCtx
 
-    CollectAllData()
-    PopulateAllTabs(ctx.tabKeys, ctx.listViews)
+    CollectAllDataProgressive()
 
     totalItems := 0
     for key, arr in AllData
@@ -1549,6 +1690,238 @@ DoRefreshWork() {
     ctx.btnExport.Opt("-Disabled")
     ctx.btnClipboard.Opt("-Disabled")
     ctx.btnRefresh.Opt("-Disabled")
+}
+
+; ═══════════════════════════════════════════════════════════════
+;  AUTO-UPDATE FROM GITHUB
+; ═══════════════════════════════════════════════════════════════
+
+CheckForUpdate() {
+    global APP_VERSION, GITHUB_REPO, GuiCtx
+
+    GuiCtx.btnUpdate.Opt("+Disabled")
+    GuiCtx.sb.SetText("  ⬆  " . T("upd_checking"))
+
+    try {
+        ; Query GitHub API for latest release
+        whr := ComObject("WinHttp.WinHttpRequest.5.1")
+        whr.Open("GET", "https://api.github.com/repos/" . GITHUB_REPO . "/releases/latest", false)
+        whr.SetRequestHeader("User-Agent", "SystemInfo-AHK/" . APP_VERSION)
+        whr.SetRequestHeader("Accept", "application/vnd.github.v3+json")
+        whr.Send()
+
+        if (whr.Status != 200) {
+            GuiCtx.btnUpdate.Opt("-Disabled")
+            GuiCtx.sb.SetText("")
+            MsgBox(T("upd_error") . "`nHTTP " . whr.Status, T("upd_error_title"), "16")
+            return
+        }
+
+        responseText := whr.ResponseText
+
+        ; Parse tag_name from JSON (lightweight — no JSON lib needed)
+        remoteVersion := ""
+        if (RegExMatch(responseText, '"tag_name"\s*:\s*"v?([^"]+)"', &m))
+            remoteVersion := m[1]
+
+        if (remoteVersion = "") {
+            GuiCtx.btnUpdate.Opt("-Disabled")
+            GuiCtx.sb.SetText("")
+            MsgBox(T("upd_error") . "`nCould not parse version from response.", T("upd_error_title"), "16")
+            return
+        }
+
+        ; Compare versions
+        if (CompareVersions(remoteVersion, APP_VERSION) > 0) {
+            ; Update available — ask user
+            GuiCtx.sb.SetText("  ⬆  " . T("upd_available") . "  " . remoteVersion)
+            choice := MsgBox(
+                T("upd_available") . "`n`n"
+                . T("upd_current") . ":  v" . APP_VERSION . "`n"
+                . T("upd_latest") . ":  v" . remoteVersion . "`n`n"
+                . T("upd_confirm"),
+                T("upd_available"),
+                "YesNo Icon!"
+            )
+            if (choice = "Yes") {
+                DownloadAndInstallUpdate(responseText)
+            } else {
+                GuiCtx.btnUpdate.Opt("-Disabled")
+                GuiCtx.sb.SetText("")
+            }
+        } else {
+            ; Already up to date
+            GuiCtx.btnUpdate.Opt("-Disabled")
+            GuiCtx.sb.SetText("")
+            MsgBox(TF("upd_noupdate", APP_VERSION), T("upd_noupdate_title"), "64")
+        }
+    } catch as e {
+        GuiCtx.btnUpdate.Opt("-Disabled")
+        GuiCtx.sb.SetText("")
+        MsgBox(T("upd_error") . "`n" . e.Message, T("upd_error_title"), "16")
+    }
+}
+
+DownloadAndInstallUpdate(responseText) {
+    global GITHUB_REPO, GuiCtx
+
+    GuiCtx.sb.SetText("  ⬇  " . T("upd_downloading"))
+
+    try {
+        ; ── Find the .zip asset URL from the release ────────────
+        downloadUrl := ""
+        pos := 1
+        while (RegExMatch(responseText, '"browser_download_url"\s*:\s*"([^"]+)"', &m, pos)) {
+            if (RegExMatch(m[1], "i)\.zip$")) {
+                downloadUrl := m[1]
+                break
+            }
+            pos := m.Pos + m.Len
+        }
+
+        if (downloadUrl = "") {
+            GuiCtx.btnUpdate.Opt("-Disabled")
+            GuiCtx.sb.SetText("")
+            MsgBox(T("upd_dl_error") . "`nNo .zip asset found in the latest release.", T("upd_dl_error_title"), "16")
+            return
+        }
+
+        ; ── Prepare paths ───────────────────────────────────────
+        exePath    := A_ScriptFullPath                     ; the running .exe
+        exeDir     := A_ScriptDir
+        exeName    := ""
+        SplitPath(exePath, &exeName)
+        tempDir    := A_Temp . "\SystemInfo_Update_" . A_TickCount
+        zipPath    := tempDir . "\update.zip"
+        extractDir := tempDir . "\extracted"
+        backupPath := exePath . ".bak"
+
+        DirCreate(tempDir)
+        DirCreate(extractDir)
+
+        ; ── Download the .zip ───────────────────────────────────
+        whr := ComObject("WinHttp.WinHttpRequest.5.1")
+        whr.Open("GET", downloadUrl, false)
+        whr.SetRequestHeader("User-Agent", "SystemInfo-AHK-Updater")
+        whr.Send()
+
+        if (whr.Status != 200) {
+            try DirDelete(tempDir, true)
+            GuiCtx.btnUpdate.Opt("-Disabled")
+            GuiCtx.sb.SetText("")
+            MsgBox(T("upd_dl_error") . "`nHTTP " . whr.Status, T("upd_dl_error_title"), "16")
+            return
+        }
+
+        ; Write zip to disk
+        adoStream := ComObject("ADODB.Stream")
+        adoStream.Type := 1  ; Binary
+        adoStream.Open()
+        adoStream.Write(whr.ResponseBody)
+        adoStream.SaveToFile(zipPath, 2)  ; 2 = overwrite
+        adoStream.Close()
+
+        ; ── Extract the .zip using Shell32 ──────────────────────
+        shell := ComObject("Shell.Application")
+        zipFolder := shell.NameSpace(zipPath)
+        destFolder := shell.NameSpace(extractDir)
+
+        if (!zipFolder || !destFolder) {
+            try DirDelete(tempDir, true)
+            GuiCtx.btnUpdate.Opt("-Disabled")
+            GuiCtx.sb.SetText("")
+            MsgBox(T("upd_dl_error") . "`nFailed to open zip archive.", T("upd_dl_error_title"), "16")
+            return
+        }
+
+        ; 0x14 = FOF_NOCONFIRMATION (0x10) | FOF_SILENT (0x04)
+        destFolder.CopyHere(zipFolder.Items(), 0x14)
+
+        ; ── Find the .exe in extracted files (recursive) ────────
+        newExePath := FindExeInDir(extractDir)
+
+        if (newExePath = "") {
+            try DirDelete(tempDir, true)
+            GuiCtx.btnUpdate.Opt("-Disabled")
+            GuiCtx.sb.SetText("")
+            MsgBox(T("upd_dl_error") . "`nNo .exe file found in the downloaded archive.", T("upd_dl_error_title"), "16")
+            return
+        }
+
+        ; ── Replace the running .exe via batch trampoline ───────
+        ; A running .exe cannot overwrite itself, so we write a
+        ; small batch script that:
+        ;   1. Waits for this process to exit
+        ;   2. Creates a backup of the old .exe
+        ;   3. Copies the new .exe in place
+        ;   4. Relaunches the application
+        ;   5. Cleans up temp files and itself
+        batPath := tempDir . "\update.bat"
+        pid := DllCall("GetCurrentProcessId", "UInt")
+
+        batContent := ""
+        batContent .= "@echo off`r`n"
+        batContent .= "echo Waiting for SystemInfo to close...`r`n"
+        batContent .= ":waitloop`r`n"
+        batContent .= 'tasklist /FI "PID eq ' . pid . '" 2>NUL | find "' . pid . '" >NUL`r`n'
+        batContent .= "if not errorlevel 1 (`r`n"
+        batContent .= "    timeout /t 1 /nobreak >NUL`r`n"
+        batContent .= "    goto waitloop`r`n"
+        batContent .= ")`r`n"
+        batContent .= 'if exist "' . backupPath . '" del /f "' . backupPath . '"`r`n'
+        batContent .= 'rename "' . exePath . '" "' . exeName . '.bak"`r`n'
+        batContent .= 'copy /y "' . newExePath . '" "' . exePath . '"`r`n'
+        batContent .= 'start "" "' . exePath . '"`r`n'
+        batContent .= "timeout /t 2 /nobreak >NUL`r`n"
+        batContent .= 'rd /s /q "' . tempDir . '"`r`n'
+        batContent .= "exit`r`n"
+
+        f := FileOpen(batPath, "w", "CP0")
+        f.Write(batContent)
+        f.Close()
+
+        MsgBox(T("upd_success"), T("upd_success_title"), "64")
+
+        ; Launch the batch script hidden and exit
+        Run(A_ComSpec . ' /c "' . batPath . '"', tempDir, "Hide")
+        ExitApp()
+
+    } catch as e {
+        try DirDelete(tempDir, true)
+        GuiCtx.btnUpdate.Opt("-Disabled")
+        GuiCtx.sb.SetText("")
+        MsgBox(T("upd_dl_error") . "`n" . e.Message, T("upd_dl_error_title"), "16")
+    }
+}
+
+; Recursively search a directory for the first .exe file
+FindExeInDir(dir) {
+    ; First check top level
+    loop files dir . "\*.exe" {
+        return A_LoopFileFullPath
+    }
+    ; Then recurse into subdirectories
+    loop files dir . "\*", "D" {
+        result := FindExeInDir(A_LoopFileFullPath)
+        if (result != "")
+            return result
+    }
+    return ""
+}
+
+; Compare two semver-style version strings (e.g., "1.3.0" vs "1.2.1")
+; Returns: >0 if a > b, 0 if equal, <0 if a < b
+CompareVersions(a, b) {
+    partsA := StrSplit(a, ".")
+    partsB := StrSplit(b, ".")
+    maxLen := Max(partsA.Length, partsB.Length)
+    loop maxLen {
+        numA := (A_Index <= partsA.Length) ? Integer(partsA[A_Index]) : 0
+        numB := (A_Index <= partsB.Length) ? Integer(partsB[A_Index]) : 0
+        if (numA != numB)
+            return numA - numB
+    }
+    return 0
 }
 
 ; ═══════════════════════════════════════════════════════════════
