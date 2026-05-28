@@ -3,7 +3,7 @@
 ;@Ahk2Exe-SetDescription Comprehensive hardware & software report with export
 ;@Ahk2Exe-SetCompanyName Rekow IT
 ;@Ahk2Exe-SetCopyright Copyright © 2026 Rekow IT
-;@Ahk2Exe-SetVersion 1.3.1
+;@Ahk2Exe-SetVersion 1.4.2
 ;@Ahk2Exe-SetLanguage 0x0807
 #Requires AutoHotkey v2.0
 #SingleInstance Force
@@ -11,7 +11,7 @@
 SetWorkingDir(A_ScriptDir)
 
 ; ─── Global state ───────────────────────────────────────────────
-global APP_VERSION   := "1.3.1"
+global APP_VERSION   := "1.4.2"
 global APP_COPYRIGHT := "`n`nCopyright © 2026 by Rekow IT`n`nhttps://rekow.ch"
 global GITHUB_REPO   := "acidstout/systeminfo"
 global AllData       := Map()
@@ -27,7 +27,7 @@ InitLanguage()
 
 ; ─── Show GUI immediately, then load data ───────────────────────
 BuildMainWindow()
-ScheduleDataLoad()
+SetTimer(DoDataLoad, -50)
 return
 
 ; ═══════════════════════════════════════════════════════════════
@@ -58,7 +58,6 @@ InitEnglish() {
     Strings["generated"]          := "Generated"
     Strings["btn_export"]         := "💾  Export to File"
     Strings["btn_clipboard"]      := "📋  Copy to Clipboard"
-    Strings["btn_refresh"]        := "🔄  Refresh Data"
     Strings["btn_about"]          := "ℹ  About"
     Strings["btn_update"]         := "⬆  Update"
     Strings["about_text"]         := "SystemInfo v" . APP_VERSION . "`n`nComprehensive system information viewer" . APP_COPYRIGHT
@@ -80,14 +79,11 @@ InitEnglish() {
     Strings["sb_starting"]        := "  ⏳  Starting up…"
     Strings["sb_collecting"]      := "  ⏳  Collecting system information…"
     Strings["sb_done"]            := "  ✓  {1} properties collected across {2} categories     |     {3}"
-    Strings["sb_refreshing"]      := "  🔄  Refreshing system information…"
-    Strings["sb_refreshed"]       := "  ✓  {1} properties refreshed at {2}     |     {3}"
+    Strings["sb_tab_loading"]     := "  ⏳  Loading {1} data…"
     Strings["admin_yes"]          := "Running as Administrator"
     Strings["admin_tip"]          := "Tip: Run as Admin for full detail"
     Strings["loading"]            := "  ⏳  Loading…"
     Strings["loading_detail"]     := "Please wait, querying hardware information"
-    Strings["refreshing"]         := "  🔄  Refreshing…"
-    Strings["refreshing_detail"]  := "Re-querying hardware information"
     Strings["export_dialog"]      := "Export System Report"
     Strings["export_filter"]      := "Text Files (*.txt)"
     Strings["export_ok"]          := "Report saved successfully:"
@@ -196,6 +192,18 @@ InitEnglish() {
     Strings["mon_none"]           := "No monitor data available"
     Strings["mon_primary"]        := "Primary"
 
+    ; ─── Data labels: HDR ───────────────────────────────────────
+    Strings["hdr_capable"]        := "HDR Capable"
+    Strings["hdr_state"]          := "HDR State"
+    Strings["hdr_eotfs"]          := "EOTFs"
+    Strings["hdr_peak_lum"]       := "Peak Luminance"
+    Strings["hdr_max_frame_lum"]  := "Max Frame Luminance"
+    Strings["hdr_min_lum"]        := "Min Luminance"
+    Strings["hdr_bt2020"]         := "BT.2020"
+    Strings["hdr_dolby"]          := "Dolby Vision"
+    Strings["hdr_color_depth"]    := "Color Depth"
+    Strings["hdr_sdr_white"]      := "SDR White Level"
+
     ; ─── Data labels: Disks ─────────────────────────────────────
     Strings["disk_model"]         := "Model"
     Strings["disk_iface"]         := "Interface"
@@ -302,7 +310,6 @@ InitGerman() {
     Strings["generated"]          := "Erstellt"
     Strings["btn_export"]         := "💾  Als Datei speichern"
     Strings["btn_clipboard"]      := "📋  In Zwischenablage"
-    Strings["btn_refresh"]        := "🔄  Aktualisieren"
     Strings["btn_about"]          := "ℹ  Info"
     Strings["btn_update"]         := "⬆  Update"
     Strings["about_text"]         := "SystemInfo v" . APP_VERSION . "`n`nUmfassende Systeminformationsanzeige" . APP_COPYRIGHT
@@ -324,14 +331,11 @@ InitGerman() {
     Strings["sb_starting"]        := "  ⏳  Wird gestartet…"
     Strings["sb_collecting"]      := "  ⏳  Systeminformationen werden gesammelt…"
     Strings["sb_done"]            := "  ✓  {1} Eigenschaften in {2} Kategorien erfasst     |     {3}"
-    Strings["sb_refreshing"]      := "  🔄  Systeminformationen werden aktualisiert…"
-    Strings["sb_refreshed"]       := "  ✓  {1} Eigenschaften aktualisiert um {2}     |     {3}"
+    Strings["sb_tab_loading"]     := "  ⏳  {1}-Daten werden geladen…"
     Strings["admin_yes"]          := "Als Administrator ausgeführt"
     Strings["admin_tip"]          := "Tipp: Als Admin ausführen für vollständige Details"
     Strings["loading"]            := "  ⏳  Laden…"
     Strings["loading_detail"]     := "Bitte warten, Hardware wird abgefragt"
-    Strings["refreshing"]         := "  🔄  Aktualisierung…"
-    Strings["refreshing_detail"]  := "Hardware wird erneut abgefragt"
     Strings["export_dialog"]      := "Systembericht exportieren"
     Strings["export_filter"]      := "Textdateien (*.txt)"
     Strings["export_ok"]          := "Bericht erfolgreich gespeichert:"
@@ -439,6 +443,18 @@ InitGerman() {
     Strings["mon_devid"]          := "Geräte-ID"
     Strings["mon_none"]           := "Keine Monitordaten verfügbar"
     Strings["mon_primary"]        := "Primär"
+
+    ; ─── Datenlabels: HDR ───────────────────────────────────────
+    Strings["hdr_capable"]        := "HDR-fähig"
+    Strings["hdr_state"]          := "HDR-Status"
+    Strings["hdr_eotfs"]          := "EOTFs"
+    Strings["hdr_peak_lum"]       := "Spitzenhelligkeit"
+    Strings["hdr_max_frame_lum"]  := "Max. Bildhelligkeit"
+    Strings["hdr_min_lum"]        := "Min. Helligkeit"
+    Strings["hdr_bt2020"]         := "BT.2020"
+    Strings["hdr_dolby"]          := "Dolby Vision"
+    Strings["hdr_color_depth"]    := "Farbtiefe"
+    Strings["hdr_sdr_white"]      := "SDR-Weisswert"
 
     ; ─── Datenlabels: Datenträger ───────────────────────────────
     Strings["disk_model"]         := "Modell"
@@ -556,10 +572,6 @@ TF(key, params*) {
 ;  ASYNC LOADING
 ; ═══════════════════════════════════════════════════════════════
 
-ScheduleDataLoad() {
-    SetTimer(DoDataLoad, -50)
-}
-
 DoDataLoad() {
     global AllData, GuiCtx
     ctx := GuiCtx
@@ -568,27 +580,21 @@ DoDataLoad() {
 
     ctx.btnExport.Opt("+Disabled")
     ctx.btnClipboard.Opt("+Disabled")
-    ctx.btnRefresh.Opt("+Disabled")
 
-    for key in ctx.tabKeys {
-        if (ctx.listViews.Has(key)) {
-            lv := ctx.listViews[key]
-            lv.Delete()
-            lv.Add("", T("loading"), T("loading_detail"))
-        }
-    }
+    ResetWmiCache()
+    GetSharedOSData()
 
-    CollectAllDataProgressive()
+    AllData["OS"] := GetOSInfo()
+    PopulateSingleTab("OS")
 
-    totalItems := 0
-    for key, arr in AllData
-        totalItems += arr.Length
+    ResetWmiCache()
+
+    totalItems := AllData["OS"].Length
     adminHint := IsRunAsAdmin() ? T("admin_yes") : T("admin_tip")
-    ctx.sb.SetText(TF("sb_done", totalItems, AllData.Count, adminHint))
+    ctx.sb.SetText(TF("sb_done", totalItems, 1, adminHint))
 
     ctx.btnExport.Opt("-Disabled")
     ctx.btnClipboard.Opt("-Disabled")
-    ctx.btnRefresh.Opt("-Disabled")
 }
 
 ; Populate a single tab's ListView immediately after its data is ready
@@ -608,24 +614,67 @@ PopulateSingleTab(key) {
     }
 }
 
-PopulateAllTabs(tabKeys, listViews) {
-    global AllData
-    for key in tabKeys {
-        if (listViews.Has(key)) {
-            lv := listViews[key]
-            lv.Delete()
-            if (AllData.Has(key)) {
-                for entry in AllData[key] {
-                    label := entry[1]
-                    val   := entry[2]
-                    if (SubStr(label, 1, 3) = "───")
-                        lv.Add("", label, val)
-                    else
-                        lv.Add("", "  " . label, val)
-                }
-            }
-        }
-    }
+OnTabChange(tabCtrl, *) {
+    global AllData, GuiCtx
+    ctx := GuiCtx
+
+    tabIndex := tabCtrl.Value
+    if (tabIndex < 1 || tabIndex > ctx.tabKeys.Length)
+        return
+
+    key := ctx.tabKeys[tabIndex]
+
+    static collectors := Map(
+        "OS",          GetOSInfo.Bind(),
+        "CPU",         GetCPUInfo.Bind(),
+        "Memory",      GetMemoryInfo.Bind(),
+        "GPU",         GetGPUInfo.Bind(),
+        "Disks",       GetDiskInfo.Bind(),
+        "Network",     GetNetworkInfo.Bind(),
+        "Mainboard",   GetMainboardInfo.Bind(),
+        "Audio",       GetAudioInfo.Bind(),
+        "Printers",    GetPrinterInfo.Bind(),
+        "Peripherals", GetPeripheralInfo.Bind()
+    )
+
+    if (!collectors.Has(key))
+        return
+
+    if (!ctx.listViews.Has(key))
+        return
+
+    lv := ctx.listViews[key]
+    lv.Delete()
+    lv.Add("", T("loading"), T("loading_detail"))
+
+    ctx.btnExport.Opt("+Disabled")
+    ctx.btnClipboard.Opt("+Disabled")
+    ctx.sb.SetText(TF("sb_tab_loading", key))
+
+    SetTimer(DoTabLoad.Bind(key, collectors[key]), -50)
+}
+
+DoTabLoad(key, collector) {
+    global AllData, GuiCtx
+    ctx := GuiCtx
+
+    ResetWmiCache()
+    if (key = "OS" || key = "Memory")
+        GetSharedOSData()
+
+    AllData[key] := collector.Call()
+    PopulateSingleTab(key)
+
+    ResetWmiCache()
+
+    totalItems := 0
+    for k, arr in AllData
+        totalItems += arr.Length
+    adminHint := IsRunAsAdmin() ? T("admin_yes") : T("admin_tip")
+    ctx.sb.SetText(TF("sb_done", totalItems, AllData.Count, adminHint))
+
+    ctx.btnExport.Opt("-Disabled")
+    ctx.btnClipboard.Opt("-Disabled")
 }
 
 ; ═══════════════════════════════════════════════════════════════
@@ -662,45 +711,11 @@ GetSharedOSData() {
     global SharedOSData
     if (!IsObject(SharedOSData)) {
         try {
-            for obj in GetWmiCimv2().ExecQuery("SELECT * FROM Win32_OperatingSystem")
+            for obj in GetWmiCimv2().ExecQuery("SELECT Caption,Version,BuildNumber,OSArchitecture,InstallDate,LastBootUpTime,SystemDirectory,WindowsDirectory,RegisteredUser,SerialNumber,TotalVisibleMemorySize,FreePhysicalMemory,TotalVirtualMemorySize,FreeVirtualMemory FROM Win32_OperatingSystem")
                 SharedOSData := obj
         }
     }
     return SharedOSData
-}
-
-; Progressive collection: fetch each category and immediately
-; populate its tab so the user sees results streaming in.
-CollectAllDataProgressive() {
-    global AllData
-
-    ResetWmiCache()
-
-    ; Pre-fetch the shared OS data (used by OS + Memory tabs)
-    GetSharedOSData()
-
-    ; Collect and display each tab progressively
-    categories := [
-        ["OS",          GetOSInfo.Bind()],
-        ["CPU",         GetCPUInfo.Bind()],
-        ["Memory",      GetMemoryInfo.Bind()],
-        ["GPU",         GetGPUInfo.Bind()],
-        ["Disks",       GetDiskInfo.Bind()],
-        ["Network",     GetNetworkInfo.Bind()],
-        ["Mainboard",   GetMainboardInfo.Bind()],
-        ["Audio",       GetAudioInfo.Bind()],
-        ["Printers",    GetPrinterInfo.Bind()],
-        ["Peripherals", GetPeripheralInfo.Bind()]
-    ]
-
-    for cat in categories {
-        key      := cat[1]
-        collector := cat[2]
-        AllData[key] := collector.Call()
-        PopulateSingleTab(key)
-    }
-
-    ResetWmiCache()
 }
 
 ; ─── OS & System ────────────────────────────────────────────────
@@ -814,8 +829,7 @@ GetMemoryInfo() {
             info.Push([slotPfx . T("mem_form"), GetMemFormFactor(d["FormFactor"])])
             info.Push([slotPfx . T("mem_type"), GetMemType(d["SMBIOSMemoryType"])])
             info.Push([slotPfx . T("mem_bank"), d["BankLabel"] . " / " . d["DeviceLocator"]])
-            if (slotNum >= 1)
-                info.Push(["", ""])
+            info.Push(["", ""])
         }
     }
     if (slotNum = 0)
@@ -874,6 +888,10 @@ GetGPUInfo() {
             info.Push([T("gpu_pnp"), d["PNPDeviceID"]])
         }
     }
+
+    ; ─── HDR data sources ──────────────────────────────────────────
+    displayConfigHDR := GetDisplayConfigHDRInfo()
+    edidHDR := GetAllEDIDHDRInfo()
 
     ; ─── Monitor info — ordered by display index, primary first ──
     monitors := []
@@ -934,8 +952,8 @@ GetGPUInfo() {
     edidNames := Map()
     connTypes := Map()
     try {
-        for obj in GetWmiRootWmi().ExecQuery("SELECT * FROM WmiMonitorID") {
-            pathKey := NormalizeInstancePath(obj.InstanceName)
+        for obj in GetWmiRootWmi().ExecQuery("SELECT InstanceName,UserFriendlyName,ManufacturerName,SerialNumberID,ProductCodeID FROM WmiMonitorID") {
+            pathKey := ExtractSecondSegment(obj.InstanceName)
             edidNames[pathKey] := {
                 name:     DecodeWmiUint16Array(obj.UserFriendlyName),
                 mfg:      DecodeWmiUint16Array(obj.ManufacturerName),
@@ -945,8 +963,8 @@ GetGPUInfo() {
         }
     }
     try {
-        for obj in GetWmiRootWmi().ExecQuery("SELECT * FROM WmiMonitorConnectionParams") {
-            pathKey := NormalizeInstancePath(obj.InstanceName)
+        for obj in GetWmiRootWmi().ExecQuery("SELECT InstanceName,VideoOutputTechnology FROM WmiMonitorConnectionParams") {
+            pathKey := ExtractSecondSegment(obj.InstanceName)
             connTypes[pathKey] := GetVideoOutputType(obj.VideoOutputTechnology)
         }
     }
@@ -958,7 +976,7 @@ GetGPUInfo() {
 		info.Push(["", ""])
         info.Push(["─── Monitor " . monNum . primaryTag . " ───", ""])
 
-        monPathKey := NormalizeDeviceId(m.deviceId)
+        monPathKey := ExtractSecondSegment(m.deviceId)
         matched := false
         if (monPathKey != "") {
             for edidKey, edid in edidNames {
@@ -995,6 +1013,63 @@ GetGPUInfo() {
 
         info.Push([T("mon_adapter"), m.adapterName])
         info.Push([T("mon_devid"), m.deviceId])
+
+        ; ── HDR Information ────────────────────────────────────
+        hdrEdid := edidHDR.Has(monPathKey) ? edidHDR[monPathKey] : false
+
+        dcInfo := false
+        if (monPathKey != "") {
+            for dcKey, dcVal in displayConfigHDR {
+                dcParts := StrSplit(dcKey, "\")
+                if (dcParts.Length >= 1 && dcParts[1] = monPathKey) {
+                    dcInfo := dcVal
+                    break
+                }
+            }
+        }
+
+        hdrCapable := (hdrEdid && hdrEdid.supported) || (dcInfo && dcInfo.advColorSupported)
+
+        if (hdrCapable) {
+            if (hdrEdid && hdrEdid.supported && dcInfo && dcInfo.advColorSupported)
+                info.Push([T("hdr_capable"), T("yes") . " (EDID + Driver)"])
+            else if (hdrEdid && hdrEdid.supported)
+                info.Push([T("hdr_capable"), T("yes") . " (EDID)"])
+            else
+                info.Push([T("hdr_capable"), T("yes") . " (Driver)"])
+
+            if (dcInfo) {
+                if (dcInfo.advColorEnabled)
+                    info.Push([T("hdr_state"), "HDR ON"])
+                else if (dcInfo.advColorForceDisabled)
+                    info.Push([T("hdr_state"), "HDR force-disabled"])
+                else
+                    info.Push([T("hdr_state"), "HDR OFF"])
+            }
+
+            if (hdrEdid && hdrEdid.supported) {
+                info.Push([T("hdr_eotfs"), FormatEOTFs(hdrEdid.eotfs)])
+                if (hdrEdid.maxLuminance)
+                    info.Push([T("hdr_peak_lum"), hdrEdid.maxLuminance . " nits"])
+                if (hdrEdid.maxFrameLuminance)
+                    info.Push([T("hdr_max_frame_lum"), hdrEdid.maxFrameLuminance . " nits"])
+                if (hdrEdid.minLuminance)
+                    info.Push([T("hdr_min_lum"), hdrEdid.minLuminance . " nits"])
+                if (hdrEdid.bt2020)
+                    info.Push([T("hdr_bt2020"), T("yes")])
+                if (hdrEdid.dolbyVision)
+                    info.Push([T("hdr_dolby"), T("yes")])
+            }
+
+            if (dcInfo) {
+                if (dcInfo.bitsPerColorChannel)
+                    info.Push([T("hdr_color_depth"), dcInfo.bitsPerColorChannel . " bits"])
+                if (dcInfo.sdrWhiteLevel && dcInfo.advColorEnabled)
+                    info.Push([T("hdr_sdr_white"), dcInfo.sdrWhiteLevel . " nits"])
+            }
+        } else {
+            info.Push([T("hdr_capable"), T("no")])
+        }
     }
 
     if (monNum = 0)
@@ -1002,14 +1077,9 @@ GetGPUInfo() {
     return info
 }
 
-NormalizeInstancePath(instName) {
-    parts := StrSplit(instName, "\")
-    return (parts.Length >= 2) ? parts[2] : instName
-}
-
-NormalizeDeviceId(devId) {
-    parts := StrSplit(devId, "\")
-    return (parts.Length >= 2) ? parts[2] : devId
+ExtractSecondSegment(path) {
+    parts := StrSplit(path, "\")
+    return (parts.Length >= 2) ? parts[2] : path
 }
 
 DecodeWmiUint16Array(arr) {
@@ -1033,6 +1103,294 @@ GetVideoOutputType(code) {
         14, "SDTV Dongle", 15, "Miracast", 16, "Internal"
     )
     return types.Has(code) ? types[code] : "Unknown (" . code . ")"
+}
+
+; ─── HDR / EDID helpers ────────────────────────────────────────
+
+ReadEDID(regPath) {
+    hRoot := 0x80000002  ; HKEY_LOCAL_MACHINE
+    subKey := SubStr(regPath, 6)  ; strip "HKLM\"
+
+    hKey := 0
+    res := DllCall("advapi32\RegOpenKeyEx", "Ptr", hRoot, "Str", subKey, "UInt", 0, "UInt", 0x20019, "Ptr*", &hKey, "UInt")
+    if (res != 0)
+        return ""
+
+    dataSize := 0
+    regType := 0
+    DllCall("advapi32\RegQueryValueEx", "Ptr", hKey, "Str", "EDID", "Ptr", 0, "UInt*", &regType, "Ptr", 0, "UInt*", &dataSize, "UInt")
+
+    if (dataSize = 0) {
+        DllCall("advapi32\RegCloseKey", "Ptr", hKey)
+        return ""
+    }
+
+    buf := Buffer(dataSize, 0)
+    res := DllCall("advapi32\RegQueryValueEx", "Ptr", hKey, "Str", "EDID", "Ptr", 0, "UInt*", &regType, "Ptr", buf, "UInt*", &dataSize, "UInt")
+    DllCall("advapi32\RegCloseKey", "Ptr", hKey)
+
+    if (res != 0)
+        return ""
+    return {ptr: buf, size: dataSize}
+}
+
+ParseEDIDBasic(edid) {
+    info := {}
+    info.valid := false
+
+    if (!edid || edid.size < 128)
+        return info
+
+    headerOk := (NumGet(edid.ptr, 0, "UChar") = 0x00)
+        && (NumGet(edid.ptr, 1, "UChar") = 0xFF)
+        && (NumGet(edid.ptr, 2, "UChar") = 0xFF)
+        && (NumGet(edid.ptr, 3, "UChar") = 0xFF)
+        && (NumGet(edid.ptr, 4, "UChar") = 0xFF)
+        && (NumGet(edid.ptr, 5, "UChar") = 0xFF)
+        && (NumGet(edid.ptr, 6, "UChar") = 0xFF)
+        && (NumGet(edid.ptr, 7, "UChar") = 0x00)
+
+    if (!headerOk)
+        return info
+
+    info.valid := true
+    info.extensions := NumGet(edid.ptr, 126, "UChar")
+    return info
+}
+
+ParseCTAExtensions(edid) {
+    hdr := {}
+    hdr.supported := false
+    hdr.eotfs := 0
+    hdr.maxLuminance := 0
+    hdr.maxFrameLuminance := 0
+    hdr.minLuminance := 0
+    hdr.bt2020 := false
+    hdr.dolbyVision := false
+
+    if (!edid || edid.size <= 128)
+        return hdr
+
+    numExt := NumGet(edid.ptr, 126, "UChar")
+    if (numExt = 0)
+        return hdr
+
+    Loop numExt {
+        extOffset := 128 * A_Index
+        if (extOffset + 128 > edid.size)
+            break
+
+        extTag := NumGet(edid.ptr, extOffset, "UChar")
+        if (extTag != 0x02)
+            continue
+
+        dtdOffset := NumGet(edid.ptr, extOffset + 2, "UChar")
+        if (dtdOffset <= 4)
+            continue
+
+        pos := extOffset + 4
+        endPos := extOffset + dtdOffset
+
+        while (pos < endPos) {
+            header := NumGet(edid.ptr, pos, "UChar")
+            blockTag := (header >> 5) & 0x07
+            blockLen := header & 0x1F
+
+            if (pos + 1 + blockLen > endPos)
+                break
+
+            if (blockTag = 7 && blockLen >= 1) {
+                extBlockTag := NumGet(edid.ptr, pos + 1, "UChar")
+
+                if (extBlockTag = 6 && blockLen >= 3) {
+                    hdr.supported := true
+                    hdr.eotfs := NumGet(edid.ptr, pos + 2, "UChar")
+
+                    if (blockLen >= 5) {
+                        rawMax := NumGet(edid.ptr, pos + 4, "UChar")
+                        if (rawMax > 0)
+                            hdr.maxLuminance := Round(2 ** (rawMax / 32))
+                    }
+                    if (blockLen >= 6) {
+                        rawFrame := NumGet(edid.ptr, pos + 5, "UChar")
+                        if (rawFrame > 0)
+                            hdr.maxFrameLuminance := Round(2 ** (rawFrame / 32))
+                    }
+                    if (blockLen >= 7) {
+                        rawMin := NumGet(edid.ptr, pos + 6, "UChar")
+                        if (rawMin > 0 && hdr.maxLuminance > 0)
+                            hdr.minLuminance := Round(hdr.maxLuminance * (rawMin / 255) ** 2 / 100, 4)
+                    }
+                }
+
+                if (extBlockTag = 5 && blockLen >= 2) {
+                    colorByte := NumGet(edid.ptr, pos + 2, "UChar")
+                    if (colorByte & 0xC0)
+                        hdr.bt2020 := true
+                }
+
+                if (extBlockTag = 1 && blockLen >= 4) {
+                    oui1 := NumGet(edid.ptr, pos + 2, "UChar")
+                    oui2 := NumGet(edid.ptr, pos + 3, "UChar")
+                    oui3 := NumGet(edid.ptr, pos + 4, "UChar")
+                    if (oui1 = 0x46 && oui2 = 0xD0 && oui3 = 0x00)
+                        hdr.dolbyVision := true
+                }
+            }
+
+            pos += 1 + blockLen
+        }
+    }
+
+    return hdr
+}
+
+GetDisplayConfigHDRInfo() {
+    results := Map()
+    results.CaseSense := false
+
+    QDC_ONLY_ACTIVE_PATHS := 0x00000002
+
+    numPaths := 0
+    numModes := 0
+    res := DllCall("user32\GetDisplayConfigBufferSizes",
+        "UInt", QDC_ONLY_ACTIVE_PATHS,
+        "UInt*", &numPaths,
+        "UInt*", &numModes,
+        "Int")
+    if (res != 0 || numPaths = 0)
+        return results
+
+    pathSize := 72
+    modeSize := 64
+    pathBuf := Buffer(numPaths * pathSize, 0)
+    modeBuf := Buffer(numModes * modeSize, 0)
+
+    res := DllCall("user32\QueryDisplayConfig",
+        "UInt", QDC_ONLY_ACTIVE_PATHS,
+        "UInt*", &numPaths, "Ptr", pathBuf,
+        "UInt*", &numModes, "Ptr", modeBuf,
+        "Ptr", 0,
+        "Int")
+    if (res != 0)
+        return results
+
+    Loop numPaths {
+        pathOffset := (A_Index - 1) * pathSize
+
+        targetAdapterLow := NumGet(pathBuf, pathOffset + 20, "UInt")
+        targetAdapterHigh := NumGet(pathBuf, pathOffset + 24, "UInt")
+        targetId := NumGet(pathBuf, pathOffset + 28, "UInt")
+
+        tdnBuf := Buffer(420, 0)
+        NumPut("UInt", 2, tdnBuf, 0)
+        NumPut("UInt", 420, tdnBuf, 4)
+        NumPut("UInt", targetAdapterLow, tdnBuf, 8)
+        NumPut("UInt", targetAdapterHigh, tdnBuf, 12)
+        NumPut("UInt", targetId, tdnBuf, 16)
+
+        if (DllCall("user32\DisplayConfigGetDeviceInfo", "Ptr", tdnBuf, "Int") != 0)
+            continue
+
+        monitorPath := StrGet(tdnBuf.Ptr + 164, 128, "UTF-16")
+
+        mapKey := ""
+        if (monitorPath != "") {
+            parts := StrSplit(monitorPath, "#")
+            if (parts.Length >= 3)
+                mapKey := parts[2] "\" parts[3]
+        }
+        if (mapKey = "")
+            continue
+
+        aciBuf := Buffer(32, 0)
+        NumPut("UInt", 9, aciBuf, 0)
+        NumPut("UInt", 32, aciBuf, 4)
+        NumPut("UInt", targetAdapterLow, aciBuf, 8)
+        NumPut("UInt", targetAdapterHigh, aciBuf, 12)
+        NumPut("UInt", targetId, aciBuf, 16)
+
+        advColorSupported := false
+        advColorEnabled := false
+        advColorForceDisabled := false
+        bitsPerColor := 0
+
+        if (DllCall("user32\DisplayConfigGetDeviceInfo", "Ptr", aciBuf, "Int") = 0) {
+            flags := NumGet(aciBuf, 20, "UInt")
+            advColorSupported := !!(flags & 0x1)
+            advColorEnabled := !!(flags & 0x2)
+            advColorForceDisabled := !!(flags & 0x8)
+            bitsPerColor := NumGet(aciBuf, 28, "UInt")
+        }
+
+        sdrWhiteNits := 0
+        swlBuf := Buffer(24, 0)
+        NumPut("UInt", 11, swlBuf, 0)
+        NumPut("UInt", 24, swlBuf, 4)
+        NumPut("UInt", targetAdapterLow, swlBuf, 8)
+        NumPut("UInt", targetAdapterHigh, swlBuf, 12)
+        NumPut("UInt", targetId, swlBuf, 16)
+
+        if (DllCall("user32\DisplayConfigGetDeviceInfo", "Ptr", swlBuf, "Int") = 0) {
+            rawLevel := NumGet(swlBuf, 20, "UInt")
+            if (rawLevel > 0)
+                sdrWhiteNits := Round(rawLevel * 80 / 1000)
+        }
+
+        results[mapKey] := {
+            advColorSupported: advColorSupported,
+            advColorEnabled: advColorEnabled,
+            advColorForceDisabled: advColorForceDisabled,
+            bitsPerColorChannel: bitsPerColor,
+            sdrWhiteLevel: sdrWhiteNits,
+        }
+    }
+
+    return results
+}
+
+FormatEOTFs(eotfByte) {
+    eotfs := []
+    if (eotfByte & 0x01)
+        eotfs.Push("SDR Gamma")
+    if (eotfByte & 0x02)
+        eotfs.Push("HDR Gamma")
+    if (eotfByte & 0x04)
+        eotfs.Push("PQ (HDR10)")
+    if (eotfByte & 0x08)
+        eotfs.Push("HLG")
+    if (eotfs.Length = 0)
+        return "None"
+    result := ""
+    for i, e in eotfs
+        result .= (i > 1 ? ", " : "") . e
+    return result
+}
+
+GetAllEDIDHDRInfo() {
+    results := Map()
+    results.CaseSense := false
+    regEnum := "HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY"
+    try {
+        Loop Reg regEnum, "K" {
+            monitorModel := A_LoopRegName
+            modelPath := regEnum "\" monitorModel
+            Loop Reg modelPath, "K" {
+                instanceId := A_LoopRegName
+                edidPath := modelPath "\" instanceId "\Device Parameters"
+                edid := ReadEDID(edidPath)
+                if (!edid || edid.size < 128)
+                    continue
+                basic := ParseEDIDBasic(edid)
+                if (!basic.valid)
+                    continue
+                hdrInfo := ParseCTAExtensions(edid)
+                if (!results.Has(monitorModel))
+                    results[monitorModel] := hdrInfo
+            }
+        }
+    }
+    return results
 }
 
 RegReadQWORD(keyPath, valueName) {
@@ -1106,13 +1464,6 @@ ResolveVRAM(pnpDeviceID, adapterRAM) {
     return adapterRAM
 }
 
-FormatDriverDate(raw) {
-    ; WMI returns yyyyMMddHHmmss.ffffff+zzz — extract a clean date
-    if (StrLen(raw) >= 8)
-        return SubStr(raw, 1, 4) "-" SubStr(raw, 5, 2) "-" SubStr(raw, 7, 2)
-    return raw
-}
-
 ; ─── Disks ──────────────────────────────────────────────────────
 GetDiskInfo() {
     info := []
@@ -1171,7 +1522,7 @@ GetNetworkInfo() {
     try {
         ; Network adapters have array properties (IPAddress, IPSubnet, etc.)
         ; that WmiCollect can't handle generically, so snapshot manually
-        resultSet := GetWmiCimv2().ExecQuery("SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=TRUE")
+        resultSet := GetWmiCimv2().ExecQuery("SELECT Description,MACAddress,DHCPEnabled,DHCPServer,IPAddress,IPSubnet,DefaultIPGateway,DNSServerSearchOrder FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=TRUE")
         for obj in resultSet {
             try {
                 d := Map()
@@ -1262,20 +1613,24 @@ GetMainboardInfo() {
     }
     info.Push(["", ""])
     info.Push([T("tpm_hdr"), ""])
-    try {
-        tpmFound := false
-        for obj in ComObjGet("winmgmts:\\.\root\cimv2\Security\MicrosoftTpm").ExecQuery("SELECT * FROM Win32_Tpm") {
-            tpmFound := true
-            mfg := obj.ManufacturerIdTxt, ver := obj.SpecVersion
-            info.Push([T("tpm_present"), T("yes")])
-            info.Push([T("tpm_mfg"), mfg])
-            info.Push([T("tpm_ver"), ver])
-        }
-        if (!tpmFound)
-            info.Push(["TPM", T("tpm_no")])
-    } catch {
-        info.Push(["TPM", T("tpm_admin")])
-    }
+	If (IsRunAsAdmin()) {
+		try {
+			tpmFound := false
+			for obj in ComObjGet("winmgmts:\\.\root\cimv2\Security\MicrosoftTpm").ExecQuery("SELECT ManufacturerIdTxt,SpecVersion FROM Win32_Tpm") {
+				tpmFound := true
+				mfg := obj.ManufacturerIdTxt, ver := obj.SpecVersion
+				info.Push([T("tpm_present"), T("yes")])
+				info.Push([T("tpm_mfg"), mfg])
+				info.Push([T("tpm_ver"), ver])
+			}
+			if (!tpmFound)
+				info.Push(["TPM", T("tpm_no")])
+		} catch {
+			info.Push(["TPM", T("tpm_admin")])
+		}
+	} else {
+		info.Push(["TPM", T("tpm_admin")])
+	}
     return info
 }
 
@@ -1308,7 +1663,7 @@ GetPrinterInfo() {
     snapshots := []
     try {
         ; Printers have CapabilityDescriptions (array), snapshot manually
-        resultSet := GetWmiCimv2().ExecQuery("SELECT * FROM Win32_Printer")
+        resultSet := GetWmiCimv2().ExecQuery("SELECT Name,DriverName,PortName,Default,Shared,Network,PrinterStatus,ShareName,Location,HorizontalResolution,VerticalResolution,CapabilityDescriptions FROM Win32_Printer")
         for obj in resultSet {
             try {
                 d := Map()
@@ -1501,6 +1856,12 @@ GetPeripheralInfo() {
 ; freeing the WMI service for the next query. All formatting and processing
 ; happens afterwards on plain AHK data at native speed.
 WmiCollect(wmiService, query, properties) {
+    if (SubStr(query, 1, 14) = "SELECT * FROM ") {
+        cols := ""
+        for prop in properties
+            cols .= (cols != "" ? "," : "") . prop
+        query := "SELECT " . cols . SubStr(query, 9)
+    }
     rows := []
     resultSet := wmiService.ExecQuery(query)
     for obj in resultSet {
@@ -1633,6 +1994,7 @@ BuildMainWindow() {
         listViews[key] := lv
     }
     tabs.UseTab()
+    tabs.OnEvent("Change", OnTabChange)
 
     ; ─── Bottom button bar ──────────────────────────────────────
     mainGui.SetFont("s9", "Segoe UI")
@@ -1643,9 +2005,6 @@ BuildMainWindow() {
 
     btnClipboard := mainGui.AddButton("x+8 y" . btnY . " w" . BTN_W . " h" . BTN_H . " +Disabled", T("btn_clipboard"))
     btnClipboard.OnEvent("Click", (*) => CopyToClipboard())
-
-    btnRefresh := mainGui.AddButton("x+8 y" . btnY . " w" . BTN_W . " h" . BTN_H . " +Disabled", T("btn_refresh"))
-    btnRefresh.OnEvent("Click", (*) => DoRefresh())
 
     btnAbout := mainGui.AddButton("x+8 y" . btnY . " w" . BTN_W . " h" . BTN_H, T("btn_about"))
     btnAbout.OnEvent("Click", (*) => MsgBox(T("about_text"), T("about_title"), "64"))
@@ -1664,7 +2023,6 @@ BuildMainWindow() {
     GuiCtx.tabKeys      := tabKeys
     GuiCtx.btnExport    := btnExport
     GuiCtx.btnClipboard := btnClipboard
-    GuiCtx.btnRefresh   := btnRefresh
     GuiCtx.btnAbout     := btnAbout
     GuiCtx.btnUpdate    := btnUpdate
     GuiCtx.sb           := sb
@@ -1726,54 +2084,12 @@ OnResize(thisGui, ctx, w, h, minMax) {
         btnY := tabY + tabH + 6
         ctx.btnExport.Move(, btnY)
         ctx.btnClipboard.Move(, btnY)
-        ctx.btnRefresh.Move(, btnY)
         ctx.btnAbout.Move(, btnY)
         ctx.btnUpdate.Move(, btnY)
     }
 
     DllCall("SendMessage", "Ptr", hwnd, "UInt", 0x000B, "Ptr", 1, "Ptr", 0)
     DllCall("RedrawWindow", "Ptr", hwnd, "Ptr", 0, "Ptr", 0, "UInt", 0x0085)
-}
-
-; ═══════════════════════════════════════════════════════════════
-;  REFRESH
-; ═══════════════════════════════════════════════════════════════
-
-DoRefresh() {
-    global GuiCtx
-    ctx := GuiCtx
-
-    ctx.btnExport.Opt("+Disabled")
-    ctx.btnClipboard.Opt("+Disabled")
-    ctx.btnRefresh.Opt("+Disabled")
-    ctx.sb.SetText(T("sb_refreshing"))
-
-    for key in ctx.tabKeys {
-        if (ctx.listViews.Has(key)) {
-            lv := ctx.listViews[key]
-            lv.Delete()
-            lv.Add("", T("refreshing"), T("refreshing_detail"))
-        }
-    }
-
-    SetTimer(DoRefreshWork, -50)
-}
-
-DoRefreshWork() {
-    global AllData, GuiCtx
-    ctx := GuiCtx
-
-    CollectAllDataProgressive()
-
-    totalItems := 0
-    for key, arr in AllData
-        totalItems += arr.Length
-    adminHint := IsRunAsAdmin() ? T("admin_yes") : T("admin_tip")
-    ctx.sb.SetText(TF("sb_refreshed", totalItems, FormatTime(A_Now, "HH:mm:ss"), adminHint))
-
-    ctx.btnExport.Opt("-Disabled")
-    ctx.btnClipboard.Opt("-Disabled")
-    ctx.btnRefresh.Opt("-Disabled")
 }
 
 ; ═══════════════════════════════════════════════════════════════
@@ -1871,8 +2187,7 @@ DownloadAndInstallUpdate(responseText) {
         }
 
         ; ── Prepare paths ───────────────────────────────────────
-        exePath    := A_ScriptFullPath                     ; the running .exe
-        exeDir     := A_ScriptDir
+        exePath    := A_ScriptFullPath
         exeName    := ""
         SplitPath(exePath, &exeName)
         tempDir    := A_Temp . "\SystemInfo_Update_" . A_TickCount
@@ -2012,6 +2327,48 @@ CompareVersions(a, b) {
 ;  EXPORT / CLIPBOARD
 ; ═══════════════════════════════════════════════════════════════
 
+EnsureAllDataCollected() {
+    global AllData, GuiCtx
+
+    static collectors := Map(
+        "OS",          GetOSInfo.Bind(),
+        "CPU",         GetCPUInfo.Bind(),
+        "Memory",      GetMemoryInfo.Bind(),
+        "GPU",         GetGPUInfo.Bind(),
+        "Disks",       GetDiskInfo.Bind(),
+        "Network",     GetNetworkInfo.Bind(),
+        "Mainboard",   GetMainboardInfo.Bind(),
+        "Audio",       GetAudioInfo.Bind(),
+        "Printers",    GetPrinterInfo.Bind(),
+        "Peripherals", GetPeripheralInfo.Bind()
+    )
+
+    ctx := GuiCtx
+    ctx.btnExport.Opt("+Disabled")
+    ctx.btnClipboard.Opt("+Disabled")
+
+    for key, collector in collectors {
+        if (!AllData.Has(key)) {
+            ctx.sb.SetText(TF("sb_tab_loading", key))
+            ResetWmiCache()
+            if (key = "OS" || key = "Memory")
+                GetSharedOSData()
+            AllData[key] := collector.Call()
+            PopulateSingleTab(key)
+            ResetWmiCache()
+        }
+    }
+
+    totalItems := 0
+    for k, arr in AllData
+        totalItems += arr.Length
+    adminHint := IsRunAsAdmin() ? T("admin_yes") : T("admin_tip")
+    ctx.sb.SetText(TF("sb_done", totalItems, AllData.Count, adminHint))
+
+    ctx.btnExport.Opt("-Disabled")
+    ctx.btnClipboard.Opt("-Disabled")
+}
+
 BuildReportText() {
     global AllData
     sep  := "═══════════════════════════════════════════════════════════════`n"
@@ -2073,6 +2430,7 @@ PadRight(str, width) {
 }
 
 ExportReport() {
+    EnsureAllDataCollected()
     report := BuildReportText()
     defaultName := "SystemInfo_" . A_ComputerName . "_" . FormatTime(A_Now, "yyyyMMdd_HHmmss") . ".txt"
     filePath := FileSelect("S16", defaultName, T("export_dialog"), T("export_filter"))
@@ -2091,6 +2449,7 @@ ExportReport() {
 }
 
 CopyToClipboard() {
+    EnsureAllDataCollected()
     A_Clipboard := BuildReportText()
     ToolTip(T("clipboard_ok"))
     SetTimer(() => ToolTip(), -2000)
