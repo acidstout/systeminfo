@@ -3,7 +3,7 @@
 ;@Ahk2Exe-SetDescription Comprehensive hardware & software report with export
 ;@Ahk2Exe-SetCompanyName Rekow IT
 ;@Ahk2Exe-SetCopyright Copyright © 2026 Rekow IT
-;@Ahk2Exe-SetVersion 1.4.2
+;@Ahk2Exe-SetVersion 1.4.3
 ;@Ahk2Exe-SetLanguage 0x0807
 #Requires AutoHotkey v2.0
 #SingleInstance Force
@@ -11,7 +11,7 @@
 SetWorkingDir(A_ScriptDir)
 
 ; ─── Global state ───────────────────────────────────────────────
-global APP_VERSION   := "1.4.2"
+global APP_VERSION   := "1.4.3"
 global APP_COPYRIGHT := "`n`nCopyright © 2026 by Rekow IT`n`nhttps://rekow.ch"
 global GITHUB_REPO   := "acidstout/systeminfo"
 global AllData       := Map()
