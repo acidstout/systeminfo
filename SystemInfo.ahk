@@ -976,7 +976,9 @@ GetGPUInfo() {
 		info.Push(["", ""])
         info.Push(["─── Monitor " . monNum . primaryTag . " ───", ""])
 
-        monPathKey := ExtractSecondSegment(m.deviceId)
+        devIdParts := StrSplit(m.deviceId, "#")
+        monPathKey := (devIdParts.Length >= 2) ? devIdParts[2] : ExtractSecondSegment(m.deviceId)
+        monFullKey := (devIdParts.Length >= 3) ? devIdParts[2] "\" devIdParts[3] : monPathKey
         matched := false
         if (monPathKey != "") {
             for edidKey, edid in edidNames {
@@ -1018,7 +1020,9 @@ GetGPUInfo() {
         hdrEdid := edidHDR.Has(monPathKey) ? edidHDR[monPathKey] : false
 
         dcInfo := false
-        if (monPathKey != "") {
+        if (monFullKey != "" && displayConfigHDR.Has(monFullKey)) {
+            dcInfo := displayConfigHDR[monFullKey]
+        } else if (monPathKey != "") {
             for dcKey, dcVal in displayConfigHDR {
                 dcParts := StrSplit(dcKey, "\")
                 if (dcParts.Length >= 1 && dcParts[1] = monPathKey) {
@@ -1069,6 +1073,7 @@ GetGPUInfo() {
             }
         } else {
             info.Push([T("hdr_capable"), T("no")])
+            info.Push([T("hdr_state"), "SDR"])
         }
     }
 
